@@ -1,1 +1,1 @@
-"# go-infra-adapters" 
+"# go-infra-adapters\n\nBiblioteca para abstração de serviços de nuvem. Contém contratos para `storage` e `secret` e adaptadores por provedor em `internal/`.\n\nVeja `context-docs/` para diretrizes sobre GC e contribuição.\n"
