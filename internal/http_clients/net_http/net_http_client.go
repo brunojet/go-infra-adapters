@@ -1,4 +1,4 @@
-package adapters
+package net_http
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/brunojet/go-infra-adapters/debugassert"
+	"github.com/brunojet/go-infra-adapters/pkg/http_clients/contracts"
 )
 
 type netHttpClient struct {
@@ -16,7 +17,7 @@ type netHttpClient struct {
 	headers http.Header
 }
 
-func NewNetHttpClient(opts ...HttpClientOption) (*netHttpClient, error) {
+func NewNetHttpClient(opts ...HttpClientOption) (contracts.HttpClient, error) {
 	cfg := newHttpClientConfig(opts...)
 
 	client := &http.Client{
