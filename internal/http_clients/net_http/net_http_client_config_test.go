@@ -1,4 +1,4 @@
-package adapters
+package net_http
 
 import (
 	"net/http"

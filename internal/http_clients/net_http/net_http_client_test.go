@@ -1,4 +1,4 @@
-package adapters
+package net_http
 
 import (
 	"context"
@@ -30,8 +30,9 @@ func (d *dummyRT) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func TestNewNetHttpClient_SettingsApplied(t *testing.T) {
 	myRT := &dummyRT{}
-	a, err := NewNetHttpClient(WithBaseURL("https://api.test"), WithHeader("X", "Y"), WithTimeout(10, 20), WithRoundTripper(myRT))
+	aitf, err := NewNetHttpClient(WithBaseURL("https://api.test"), WithHeader("X", "Y"), WithTimeout(10, 20), WithRoundTripper(myRT))
 	require.NoError(t, err)
+	a := aitf.(*netHttpClient)
 
 	assert.Equal(t, "https://api.test", a.baseURL)
 	assert.Equal(t, "Y", a.headers.Get("X"))
@@ -70,7 +71,8 @@ func TestBuildRequest_ResolvesRelativeURLAndMergesHeaders(t *testing.T) {
 }
 
 func TestNewNetHttpClient_NoRoundTripper_DoesNotPanic(t *testing.T) {
-	a, err := NewNetHttpClient(WithRoundTripper(middlewares.NewBreakerMiddleware(nil)))
+	aitf, err := NewNetHttpClient(WithRoundTripper(middlewares.NewBreakerMiddleware(nil)))
 	require.NoError(t, err)
+	a := aitf.(*netHttpClient)
 	assert.NotNil(t, a.client)
 }
