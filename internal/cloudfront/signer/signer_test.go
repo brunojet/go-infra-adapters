@@ -53,7 +53,7 @@ func TestNewSignerFromPEM_and_SignURLCanned(t *testing.T) {
 	if q.Get("Expires") == "" {
 		t.Fatalf("missing Expires")
 	}
-	if q.Get("Hash-Algorithm") != "RSA-SHA256" {
+	if q.Get("Hash-Algorithm") != "SHA256" {
 		t.Fatalf("unexpected Hash-Algorithm: %s", q.Get("Hash-Algorithm"))
 	}
 	// signature should be URL-safe (no +, /, =)

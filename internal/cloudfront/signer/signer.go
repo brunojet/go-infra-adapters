@@ -57,7 +57,7 @@ func NewSignerFromPEM(privateKeyPEM []byte, keyPairID string) (*Signer, error) {
 			}
 		}
 	}
-	return &Signer{priv: priv, keyPairID: keyPairID, hashAlgo: "RSA-SHA256"}, nil
+	return &Signer{priv: priv, keyPairID: keyPairID, hashAlgo: "SHA256"}, nil
 }
 
 // SignURLCanned signs the given URL using a canned policy that expires at the provided time.
