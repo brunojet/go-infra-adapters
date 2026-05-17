@@ -49,8 +49,8 @@ func TestSigner_SignURLCanned(t *testing.T) {
 	if got := q.Get("Key-Pair-Id"); got != keyPairID {
 		t.Fatalf("Key-Pair-Id mismatch: got %q want %q", got, keyPairID)
 	}
-	if got := q.Get("Hash-Algorithm"); got != "RSA-SHA256" {
-		t.Fatalf("Hash-Algorithm mismatch: got %q want %q", got, "RSA-SHA256")
+	if got := q.Get("Hash-Algorithm"); got != "SHA256" {
+		t.Fatalf("Hash-Algorithm mismatch: got %q want %q", got, "SHA256")
 	}
 
 	sigEnc := q.Get("Signature")
