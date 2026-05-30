@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/storage/contracts"
 )
 
 type S3Client struct {

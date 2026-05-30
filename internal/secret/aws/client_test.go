@@ -12,7 +12,7 @@ import (
 	smTypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/golang/mock/gomock"
 
-	mocksm "github.com/brunojet/go-infra-adapters/internal/secret/aws/mock"
+	mocksm "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws/mock"
 )
 
 type testPayload struct {

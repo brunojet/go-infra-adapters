@@ -5,8 +5,8 @@
 package crypto
 
 import (
-	internal "github.com/brunojet/go-infra-adapters/internal/crypto"
-	"github.com/brunojet/go-infra-adapters/pkg/crypto/contracts"
+	internal "github.com/brunojet/go-infra-adapters/v3/internal/crypto"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
 )
 
 // NewRSAKeyGenerator returns a KeyGenerator that produces RSA key pairs of the

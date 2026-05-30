@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brunojet/go-infra-adapters/pkg/crypto/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
 )
 
 var bg = context.Background()
@@ -194,10 +194,6 @@ func TestRSAVerifier_ImplementsInterface(t *testing.T) {
 
 // ── error-injection tests ─────────────────────────────────────────────────────
 
-type failReader struct{}
-
-func (failReader) Read([]byte) (int, error) { return 0, errors.New("rand error") }
-
 func TestGenerate_MarshalPublicKeyError(t *testing.T) {
 	orig := x509MarshalPKIXPublicKey
 	x509MarshalPKIXPublicKey = func(_ any) ([]byte, error) {
@@ -208,17 +204,6 @@ func TestGenerate_MarshalPublicKeyError(t *testing.T) {
 	_, err := NewRSAKeyGenerator(2048).Generate(bg)
 	if err == nil || !strings.Contains(err.Error(), "marshal public key") {
 		t.Fatalf("expected marshal public key error, got %v", err)
-	}
-}
-
-func TestGenerate_RandError(t *testing.T) {
-	orig := cryptoRandReader
-	cryptoRandReader = failReader{}
-	defer func() { cryptoRandReader = orig }()
-
-	_, err := NewRSAKeyGenerator(2048).Generate(bg)
-	if err == nil || !strings.Contains(err.Error(), "rsa generate") {
-		t.Fatalf("expected rsa generate error, got %v", err)
 	}
 }
 

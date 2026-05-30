@@ -3,8 +3,8 @@
 package s3
 
 import (
-	internal "github.com/brunojet/go-infra-adapters/internal/storage/aws/s3"
-	storagecontracts "github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
+	internal "github.com/brunojet/go-infra-adapters/v3/internal/storage/aws/s3"
+	storagecontracts "github.com/brunojet/go-infra-adapters/v3/pkg/storage/contracts"
 )
 
 // Option configures the S3 storage adapter. Use With* functions to create options.
