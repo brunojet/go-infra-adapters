@@ -26,10 +26,24 @@ func (s *SecretsService[T]) getVersionWithStage(ctx context.Context, stage strin
 }
 
 func (s *SecretsService[T]) movePendingStage(ctx context.Context, versionID string) error {
+	// Find previous version with AWSPENDING to remove it before moving
+	oldPending, err := s.getVersionWithStage(ctx, "AWSPENDING")
+	if err != nil {
+		return fmt.Errorf("find current AWSPENDING: %w", err)
+	}
+
+	// Idempotent: if versionID already has AWSPENDING, nothing to do
+	if oldPending == versionID {
+		return nil
+	}
+
 	in := &secretsmanager.UpdateSecretVersionStageInput{
 		SecretId:        aws.String(s.name),
 		VersionStage:    aws.String("AWSPENDING"),
 		MoveToVersionId: aws.String(versionID),
+	}
+	if oldPending != "" {
+		in.RemoveFromVersionId = aws.String(oldPending)
 	}
 	if _, err := s.client.UpdateSecretVersionStage(ctx, in); err != nil {
 		return fmt.Errorf("move AWSPENDING stage: %w", err)

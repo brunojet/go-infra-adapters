@@ -70,9 +70,19 @@ func TestMovePendingStage_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	// First call: DescribeSecret to find existing AWSPENDING
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v0": {"AWSPENDING"},
+				"v1": {},
+			},
+		}, nil,
+	).Times(1)
+	// Second call: UpdateSecretVersionStage to move AWSPENDING
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
-	)
+	).Times(1)
 	api := &SecretAPI{client: client, logger: slog.Default()}
 	svc := NewSecrets[testPayload](api, "s")
 	if err := svc.movePendingStage(context.Background(), "v1"); err != nil {
@@ -80,14 +90,74 @@ func TestMovePendingStage_Success(t *testing.T) {
 	}
 }
 
-func TestMovePendingStage_Error(t *testing.T) {
+func TestMovePendingStage_NoPreviousPending(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	// DescribeSecret with no existing AWSPENDING
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v1": {},
+			},
+		}, nil,
+	).Times(1)
+	// UpdateSecretVersionStage without RemoveFromVersionId
+	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
+	).Times(1)
+	api := &SecretAPI{client: client, logger: slog.Default()}
+	svc := NewSecrets[testPayload](api, "s")
+	if err := svc.movePendingStage(context.Background(), "v1"); err != nil {
+		t.Fatalf("movePendingStage: %v", err)
+	}
+}
+
+func TestMovePendingStage_AlreadyHasPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	// DescribeSecret shows v1 already has AWSPENDING
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v1": {"AWSPENDING"},
+			},
+		}, nil,
+	).Times(1)
+	// No UpdateSecretVersionStage call needed (idempotent)
+	api := &SecretAPI{client: client, logger: slog.Default()}
+	svc := NewSecrets[testPayload](api, "s")
+	if err := svc.movePendingStage(context.Background(), "v1"); err != nil {
+		t.Fatalf("movePendingStage: %v", err)
+	}
+}
+
+func TestMovePendingStage_DescribeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(nil, errors.New("describe fail"))
+	api := &SecretAPI{client: client, logger: slog.Default()}
+	svc := NewSecrets[testPayload](api, "s")
+	if err := svc.movePendingStage(context.Background(), "v1"); err == nil {
+		t.Fatal("expected error from DescribeSecret")
+	}
+}
+
+func TestMovePendingStage_UpdateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{"v0": {"AWSPENDING"}},
+		}, nil,
+	)
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(nil, errors.New("stage fail"))
 	api := &SecretAPI{client: client, logger: slog.Default()}
 	svc := NewSecrets[testPayload](api, "s")
 	if err := svc.movePendingStage(context.Background(), "v1"); err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected error from UpdateSecretVersionStage")
 	}
 }
