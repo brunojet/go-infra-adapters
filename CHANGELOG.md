@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.1](https://github.com/brunojet/go-infra-adapters/compare/v3.1.0...v3.1.1) (2026-05-30)
+
+
+### Bug Fixes
+
+* Go 1.26.3 test and update dependencies ([f10c3fe](https://github.com/brunojet/go-infra-adapters/commit/f10c3fec4ddcacd320655704359b36b895618657))
+* Go 1.26.3 test incompatibility and update dependencies ([fdc6835](https://github.com/brunojet/go-infra-adapters/commit/fdc6835186623d82c43af94d619d863b6f257c95))
+
 ## [3.1.0](https://github.com/brunojet/go-infra-adapters/compare/v3.0.0...v3.1.0) (2026-05-30)
 
 
