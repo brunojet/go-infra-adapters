@@ -8,35 +8,35 @@ import (
 	context "context"
 	reflect "reflect"
 
-	contracts "github.com/brunojet/go-infra-adapters/pkg/secret/contracts"
+	"github.com/brunojet/go-infra-adapters/pkg/secret/contracts"
 	gomock "github.com/golang/mock/gomock"
 )
 
 // MockSecretAdapter is a mock of SecretAdapter interface.
-type MockSecretAdapter struct {
+type MockSecretAdapter[T any] struct {
 	ctrl     *gomock.Controller
-	recorder *MockSecretAdapterMockRecorder
+	recorder *MockSecretAdapterMockRecorder[T]
 }
 
 // MockSecretAdapterMockRecorder is the mock recorder for MockSecretAdapter.
-type MockSecretAdapterMockRecorder struct {
-	mock *MockSecretAdapter
+type MockSecretAdapterMockRecorder[T any] struct {
+	mock *MockSecretAdapter[T]
 }
 
 // NewMockSecretAdapter creates a new mock instance.
-func NewMockSecretAdapter(ctrl *gomock.Controller) *MockSecretAdapter {
-	mock := &MockSecretAdapter{ctrl: ctrl}
-	mock.recorder = &MockSecretAdapterMockRecorder{mock}
+func NewMockSecretAdapter[T any](ctrl *gomock.Controller) *MockSecretAdapter[T] {
+	mock := &MockSecretAdapter[T]{ctrl: ctrl}
+	mock.recorder = &MockSecretAdapterMockRecorder[T]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockSecretAdapter) EXPECT() *MockSecretAdapterMockRecorder {
+func (m *MockSecretAdapter[T]) EXPECT() *MockSecretAdapterMockRecorder[T] {
 	return m.recorder
 }
 
 // DiscardVersion mocks base method.
-func (m *MockSecretAdapter) DiscardVersion(ctx context.Context, version string) error {
+func (m *MockSecretAdapter[T]) DiscardVersion(ctx context.Context, version string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DiscardVersion", ctx, version)
 	ret0, _ := ret[0].(error)
@@ -44,43 +44,43 @@ func (m *MockSecretAdapter) DiscardVersion(ctx context.Context, version string) 
 }
 
 // DiscardVersion indicates an expected call of DiscardVersion.
-func (mr *MockSecretAdapterMockRecorder) DiscardVersion(ctx, version interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) DiscardVersion(ctx, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DiscardVersion", reflect.TypeOf((*MockSecretAdapter)(nil).DiscardVersion), ctx, version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DiscardVersion", reflect.TypeOf((*MockSecretAdapter[T])(nil).DiscardVersion), ctx, version)
 }
 
 // GetCurrent mocks base method.
-func (m *MockSecretAdapter) GetCurrent(ctx context.Context) (*contracts.T, error) {
+func (m *MockSecretAdapter[T]) GetCurrent(ctx context.Context) (*T, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrent", ctx)
-	ret0, _ := ret[0].(*contracts.T)
+	ret0, _ := ret[0].(*T)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCurrent indicates an expected call of GetCurrent.
-func (mr *MockSecretAdapterMockRecorder) GetCurrent(ctx interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) GetCurrent(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrent", reflect.TypeOf((*MockSecretAdapter)(nil).GetCurrent), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrent", reflect.TypeOf((*MockSecretAdapter[T])(nil).GetCurrent), ctx)
 }
 
 // GetVersion mocks base method.
-func (m *MockSecretAdapter) GetVersion(ctx context.Context, version string) (*contracts.T, error) {
+func (m *MockSecretAdapter[T]) GetVersion(ctx context.Context, version string) (*T, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVersion", ctx, version)
-	ret0, _ := ret[0].(*contracts.T)
+	ret0, _ := ret[0].(*T)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVersion indicates an expected call of GetVersion.
-func (mr *MockSecretAdapterMockRecorder) GetVersion(ctx, version interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) GetVersion(ctx, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockSecretAdapter)(nil).GetVersion), ctx, version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockSecretAdapter[T])(nil).GetVersion), ctx, version)
 }
 
 // HealthCheck mocks base method.
-func (m *MockSecretAdapter) HealthCheck(ctx context.Context) error {
+func (m *MockSecretAdapter[T]) HealthCheck(ctx context.Context) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HealthCheck", ctx)
 	ret0, _ := ret[0].(error)
@@ -88,13 +88,13 @@ func (m *MockSecretAdapter) HealthCheck(ctx context.Context) error {
 }
 
 // HealthCheck indicates an expected call of HealthCheck.
-func (mr *MockSecretAdapterMockRecorder) HealthCheck(ctx interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) HealthCheck(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HealthCheck", reflect.TypeOf((*MockSecretAdapter)(nil).HealthCheck), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HealthCheck", reflect.TypeOf((*MockSecretAdapter[T])(nil).HealthCheck), ctx)
 }
 
 // Name mocks base method.
-func (m *MockSecretAdapter) Name() string {
+func (m *MockSecretAdapter[T]) Name() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Name")
 	ret0, _ := ret[0].(string)
@@ -102,13 +102,13 @@ func (m *MockSecretAdapter) Name() string {
 }
 
 // Name indicates an expected call of Name.
-func (mr *MockSecretAdapterMockRecorder) Name() *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) Name() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockSecretAdapter)(nil).Name))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockSecretAdapter[T])(nil).Name))
 }
 
 // PromoteVersion mocks base method.
-func (m *MockSecretAdapter) PromoteVersion(ctx context.Context, version string) error {
+func (m *MockSecretAdapter[T]) PromoteVersion(ctx context.Context, version string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PromoteVersion", ctx, version)
 	ret0, _ := ret[0].(error)
@@ -116,13 +116,13 @@ func (m *MockSecretAdapter) PromoteVersion(ctx context.Context, version string) 
 }
 
 // PromoteVersion indicates an expected call of PromoteVersion.
-func (mr *MockSecretAdapterMockRecorder) PromoteVersion(ctx, version interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) PromoteVersion(ctx, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PromoteVersion", reflect.TypeOf((*MockSecretAdapter)(nil).PromoteVersion), ctx, version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PromoteVersion", reflect.TypeOf((*MockSecretAdapter[T])(nil).PromoteVersion), ctx, version)
 }
 
 // SetVersion mocks base method.
-func (m *MockSecretAdapter) SetVersion(ctx context.Context, payload *contracts.T, version string) (string, error) {
+func (m *MockSecretAdapter[T]) SetVersion(ctx context.Context, payload *T, version string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetVersion", ctx, payload, version)
 	ret0, _ := ret[0].(string)
@@ -131,7 +131,10 @@ func (m *MockSecretAdapter) SetVersion(ctx context.Context, payload *contracts.T
 }
 
 // SetVersion indicates an expected call of SetVersion.
-func (mr *MockSecretAdapterMockRecorder) SetVersion(ctx, payload, version interface{}) *gomock.Call {
+func (mr *MockSecretAdapterMockRecorder[T]) SetVersion(ctx, payload, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersion", reflect.TypeOf((*MockSecretAdapter)(nil).SetVersion), ctx, payload, version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersion", reflect.TypeOf((*MockSecretAdapter[T])(nil).SetVersion), ctx, payload, version)
 }
+
+// Usage: var mock SecretAdapter[MyType] = NewMockSecretAdapter[MyType](ctrl)
+var _ contracts.SecretAdapter[any] = (*MockSecretAdapter[any])(nil)
