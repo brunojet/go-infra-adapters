@@ -34,6 +34,13 @@ func WithEndpoint(endpoint string) Option {
 	}
 }
 
+// WithClient injects a custom S3 client (useful for testing or local mocks).
+func WithClient(client S3API) Option {
+	return func(cfg *adapterConfig) {
+		cfg.client = client
+	}
+}
+
 func newConfig(opts ...Option) *adapterConfig {
 	cfg := &adapterConfig{}
 	for _, opt := range opts {
@@ -42,15 +49,20 @@ func newConfig(opts ...Option) *adapterConfig {
 	return cfg
 }
 
-func newS3Client(cfg *adapterConfig) (*s3.Client, error) {
+// s3AwsLoadDefaultConfig wraps awsconfig.LoadDefaultConfig; replaceable in tests.
+var s3AwsLoadDefaultConfig = awsconfig.LoadDefaultConfig
+
+func newS3Client(cfg *adapterConfig) (S3API, error) {
+	if cfg.client != nil {
+		return cfg.client, nil
+	}
 	var loadOpts []func(*awsconfig.LoadOptions) error
 	if cfg.region != "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion(cfg.region))
 	}
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), loadOpts...)
+	awsCfg, err := s3AwsLoadDefaultConfig(context.Background(), loadOpts...)
 	if err != nil {
 		return nil, err
 	}
-	client := s3.NewFromConfig(awsCfg)
-	return client, nil
+	return s3.NewFromConfig(awsCfg), nil
 }

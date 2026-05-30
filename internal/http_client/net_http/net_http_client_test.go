@@ -26,10 +26,7 @@ func TestMergeConfigHeaders_ClientWins(t *testing.T) {
 func TestBuildRequest_ResolveRelative(t *testing.T) {
 	c := &netHttpClient{baseURL: "http://example.com/base/"}
 	req, _ := http.NewRequest("GET", "/path", nil)
-	r, err := c.buildRequest(context.Background(), req)
-	if err != nil {
-		t.Fatalf("buildRequest: %v", err)
-	}
+	r := c.buildRequest(context.Background(), req)
 	if r.URL.String() != "http://example.com/path" {
 		t.Fatalf("unexpected URL: %s", r.URL.String())
 	}
@@ -38,10 +35,7 @@ func TestBuildRequest_ResolveRelative(t *testing.T) {
 func TestBuildRequest_ParseBaseError(t *testing.T) {
 	c := &netHttpClient{baseURL: "http://bad%z"}
 	req, _ := http.NewRequest("GET", "/path", nil)
-	r, err := c.buildRequest(context.Background(), req)
-	if err != nil {
-		t.Fatalf("buildRequest error: %v", err)
-	}
+	r := c.buildRequest(context.Background(), req)
 	if r.URL.String() != "/path" {
 		t.Fatalf("expected relative URL, got %s", r.URL.String())
 	}

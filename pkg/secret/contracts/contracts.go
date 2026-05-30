@@ -4,36 +4,28 @@ package contracts
 
 import "context"
 
-// SecretValue contains the secret payload. Keep small to reduce GC pressure.
-type SecretValue struct {
-	Data     []byte
-	Metadata map[string]string
-}
-
-// SecretClientAPI is an opaque alias for provider-specific clients used by
-// secret adapters. Keeping this as `any` decouples the public contracts from
-// concrete SDK types.
-type SecretClientAPI any
-
 // SecretAdapter represents an adapter instance bound to a single secret name.
 // This keeps the surface small: callers create a per-secret adapter via
-// SecretAPI.NewSecret(name) and then call GetCurrent/GetVersion without
+// secret.NewSecret[T](factory, name) and then call GetCurrent/GetVersion without
 // passing the name repeatedly.
-type SecretAdapter interface {
+type SecretAdapter[T any] interface {
 	// Name returns the secret name this adapter is bound to.
 	Name() string
 
 	// GetCurrent returns the current/active version of the secret.
-	GetCurrent(ctx context.Context) (*SecretValue, error)
+	GetCurrent(ctx context.Context) (*T, error)
 
 	// GetVersion returns a specific version by provider-specific id.
-	GetVersion(ctx context.Context, version string) (*SecretValue, error)
-}
+	GetVersion(ctx context.Context, version string) (*T, error)
 
-// SecretAPI constructs per-secret accessors. Keeping the provider surface
-// minimal reduces accidental broad permissions and keeps implementations
-// focused on read access patterns.
-type SecretAPI interface {
-	NewSecret(name string) (SecretAdapter, error)
-	NewSecretWithClient(name string, client SecretClientAPI) (SecretAdapter, error)
+	// SetVersion writes a new version and moves AWSPENDING to it.
+	// version is used as ClientRequestToken; pass "" to let AWS generate one.
+	// Returns the VersionId assigned by the provider.
+	SetVersion(ctx context.Context, payload *T, version string) (string, error)
+
+	// PromoteVersion promotes an existing version to current without modifying it.
+	PromoteVersion(ctx context.Context, version string) error
+
+	// DiscardVersion removes a specific version by provider-specific id.
+	DiscardVersion(ctx context.Context, version string) error
 }
