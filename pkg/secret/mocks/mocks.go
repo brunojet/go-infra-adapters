@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	"github.com/brunojet/go-infra-adapters/pkg/secret/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/secret/contracts"
 	gomock "github.com/golang/mock/gomock"
 )
 

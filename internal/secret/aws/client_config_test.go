@@ -10,7 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	mocksm "github.com/brunojet/go-infra-adapters/internal/secret/aws/mock"
+	mocksm "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws/mock"
 )
 
 func TestNewConfigOptions(t *testing.T) {

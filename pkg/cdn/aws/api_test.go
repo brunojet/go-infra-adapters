@@ -6,7 +6,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	mockcf "github.com/brunojet/go-infra-adapters/internal/cdn/aws/mock"
+	mockcf "github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws/mock"
 )
 
 func TestWithClient_NotNil(t *testing.T) {

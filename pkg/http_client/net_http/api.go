@@ -6,8 +6,8 @@ package net_http
 import (
 	"net/http"
 
-	"github.com/brunojet/go-infra-adapters/internal/http_client/net_http"
-	"github.com/brunojet/go-infra-adapters/pkg/http_client/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/internal/http_client/net_http"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/http_client/contracts"
 )
 
 // HttpClient is the public alias for the internal HTTP client contract.

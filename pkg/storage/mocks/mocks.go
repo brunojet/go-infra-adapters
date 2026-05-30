@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	contracts "github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
+	contracts "github.com/brunojet/go-infra-adapters/v3/pkg/storage/contracts"
 	gomock "github.com/golang/mock/gomock"
 )
 
