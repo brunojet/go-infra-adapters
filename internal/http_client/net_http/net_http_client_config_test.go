@@ -54,6 +54,13 @@ func TestNewHttpClientConfig_PanicOnInvalidOptions(t *testing.T) {
 	require.Panics(t, func() { newHttpClientConfig(WithRoundTripper(nil)) })
 }
 
+func TestNewHttpClientConfig_NilOptionSkipped(t *testing.T) {
+	cfg := newHttpClientConfig(nil, WithBaseURL("http://example.com"), nil)
+	if cfg.baseURL != "http://example.com" {
+		t.Fatalf("expected baseURL set despite nil options, got %q", cfg.baseURL)
+	}
+}
+
 func TestNewHttpClientConfig_ValidOptions(t *testing.T) {
 	rt := rtFunc(func(r *http.Request) (*http.Response, error) { return &http.Response{StatusCode: 200, Request: r}, nil })
 	cfg := newHttpClientConfig(WithBaseURL("http://example.com"), WithTimeout(100, 200), WithHeader("X-K", "v"), WithRoundTripper(rt))

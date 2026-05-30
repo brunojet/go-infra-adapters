@@ -6,7 +6,6 @@ package contracts
 import (
 	"context"
 	"io"
-	"time"
 )
 
 // ObjectInfo contains metadata about an object stored in a bucket.
@@ -42,11 +41,6 @@ func (o *BucketObject) Close() error {
 	return o.Body.Close()
 }
 
-// StorageClientAPI is an opaque type used when callers supply a concrete
-// client implemented by a provider. Keeping this as an alias to `any`
-// mirrors the pattern used by other adapters in the repository.
-type StorageClientAPI any
-
 // BucketAdapter represents an adapter bound to a specific bucket.
 type BucketAdapter interface {
 	BucketName() string
@@ -64,16 +58,9 @@ type BucketAdapter interface {
 	// identified by `key`. The caller must supply a non-nil `objInfo`. Returns
 	// an error if `objInfo` is nil.
 	HeadObject(ctx context.Context, key string, objInfo *ObjectInfo) error
-
-	// Presign helpers return a URL that can be used by an unauthenticated
-	// client to perform the corresponding operation. Implementations may
-	// return an error if presigning is not supported by the provider.
-	PresignGet(ctx context.Context, key string, expires time.Duration) (string, error)
-	PresignPut(ctx context.Context, key string, expires time.Duration) (string, error)
 }
 
 // StorageAPI constructs per-bucket adapters.
 type StorageAPI interface {
 	NewBucket(name string) (BucketAdapter, error)
-	NewBucketWithClient(name string, client StorageClientAPI) (BucketAdapter, error)
 }

@@ -7,7 +7,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	goaws "github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	s3sdk "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -16,16 +17,51 @@ import (
 	"github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
 )
 
-func TestNewBucketWithClient_Errors(t *testing.T) {
-	sc := &S3Client{}
-
-	if _, err := sc.NewBucketWithClient("", nil); err == nil {
-		t.Fatalf("expected error for empty bucket name")
+func injectS3LoadError(t *testing.T) func() {
+	t.Helper()
+	orig := s3AwsLoadDefaultConfig
+	s3AwsLoadDefaultConfig = func(_ context.Context, _ ...func(*awsconfig.LoadOptions) error) (goaws.Config, error) {
+		return goaws.Config{}, errors.New("injected s3 load error")
 	}
+	return func() { s3AwsLoadDefaultConfig = orig }
+}
 
-	type fake struct{}
-	if _, err := sc.NewBucketWithClient("b", fake{}); err == nil {
-		t.Fatalf("expected error for invalid client type")
+func TestNewStorageAPI_PropagatesLoadError(t *testing.T) {
+	restore := injectS3LoadError(t)
+	defer restore()
+
+	_, err := NewStorageAPI()
+	if err == nil || err.Error() != "injected s3 load error" {
+		t.Fatalf("expected load error, got %v", err)
+	}
+}
+
+func TestNewBucket_PropagatesLoadError(t *testing.T) {
+	restore := injectS3LoadError(t)
+	defer restore()
+
+	sc := &S3Client{} // client == nil → defaultClient → newS3Client → fails
+	_, err := sc.NewBucket("bn")
+	if err == nil || err.Error() != "injected s3 load error" {
+		t.Fatalf("expected load error, got %v", err)
+	}
+}
+
+func TestDefaultClient_PropagatesLoadError(t *testing.T) {
+	restore := injectS3LoadError(t)
+	defer restore()
+
+	sc := &S3Client{} // client == nil
+	_, err := sc.defaultClient()
+	if err == nil || err.Error() != "injected s3 load error" {
+		t.Fatalf("expected load error, got %v", err)
+	}
+}
+
+func TestNewBucket_EmptyName(t *testing.T) {
+	sc := &S3Client{}
+	if _, err := sc.NewBucket(""); err == nil {
+		t.Fatalf("expected error for empty bucket name")
 	}
 }
 
@@ -42,19 +78,22 @@ func TestBucketAdapter_PutGetHead(t *testing.T) {
 	payload := []byte("payload")
 	mockClient.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{
 		Body:          io.NopCloser(bytes.NewReader(payload)),
-		ETag:          aws.String("\"etag\""),
-		ContentLength: aws.Int64(int64(len(payload))),
+		ETag:          goaws.String("\"etag\""),
+		ContentLength: goaws.Int64(int64(len(payload))),
 	}, nil)
 
 	// Prepare HeadObject return
 	mockClient.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(&s3sdk.HeadObjectOutput{
-		ETag: aws.String("\"etag\""),
+		ETag: goaws.String("\"etag\""),
 	}, nil)
 
-	sc := &S3Client{}
-	bkt, err := sc.NewBucketWithClient("mybucket", mockClient)
+	sc, err := NewStorageAPI(WithClient(mockClient))
 	if err != nil {
-		t.Fatalf("NewBucketWithClient failed: %v", err)
+		t.Fatalf("NewStorageAPI failed: %v", err)
+	}
+	bkt, err := sc.NewBucket("mybucket")
+	if err != nil {
+		t.Fatalf("NewBucket failed: %v", err)
 	}
 
 	// Put (now accepts a BucketObject to allow metadata)
@@ -168,11 +207,11 @@ func TestS3Client_defaultClient_ReturnsCached(t *testing.T) {
 	}
 }
 
-func TestNewS3Client_InvokesNewS3Client(t *testing.T) {
+func TestNewStorageAPI_InvokesConstructor(t *testing.T) {
 	// Call constructor to exercise path that may attempt to load AWS config.
 	// We don't require a successful construction in all environments; the
 	// goal is to execute the function body for coverage.
-	_, _ = NewS3Client()
+	_, _ = NewStorageAPI()
 }
 
 func TestGetHeadPut_MetadataAndFields(t *testing.T) {
@@ -263,6 +302,31 @@ func TestPutObject_ClosesBody(t *testing.T) {
 	require.NoError(t, b.PutObject(context.Background(), obj))
 	if !tr.closed {
 		t.Fatalf("expected body to be closed")
+	}
+}
+
+func TestGetObject_PropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(nil, errors.New("geterr"))
+
+	b := &bucketAdapter{client: m, bucket: "b"}
+	if err := b.GetObject(context.Background(), "k", &contracts.BucketObject{}); err == nil {
+		t.Fatalf("expected error from GetObject")
+	}
+}
+
+func TestHeadObject_PropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+	m.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(nil, errors.New("headerr"))
+
+	b := &bucketAdapter{client: m, bucket: "b"}
+	var info contracts.ObjectInfo
+	if err := b.HeadObject(context.Background(), "k", &info); err == nil {
+		t.Fatalf("expected error from HeadObject")
 	}
 }
 

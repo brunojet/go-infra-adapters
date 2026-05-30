@@ -18,10 +18,8 @@ type S3Client struct {
 	mu     sync.Mutex
 }
 
-// NewS3Client constructs a provider-side client. The returned type is the
-// opaque client API used by callers when they want to provide their own
-// preconfigured client (mirrors other adapters in the repo).
-func NewS3Client(opts ...Option) (contracts.StorageClientAPI, error) {
+// NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
+func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 	cfg := newConfig(opts...)
 	client, err := newS3Client(cfg)
 	if err != nil {
@@ -30,22 +28,15 @@ func NewS3Client(opts ...Option) (contracts.StorageClientAPI, error) {
 	return &S3Client{client: client}, nil
 }
 
-func (c *S3Client) NewBucketWithClient(name string, client contracts.StorageClientAPI) (contracts.BucketAdapter, error) {
+func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 	if name == "" {
 		return nil, errors.New("bucket name required")
 	}
-	if client, ok := client.(S3API); ok {
-		return &bucketAdapter{client: client, bucket: name}, nil
-	}
-	return nil, errors.New("invalid client type provided")
-}
-
-func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 	client, err := c.defaultClient()
 	if err != nil {
 		return nil, err
 	}
-	return c.NewBucketWithClient(name, client)
+	return &bucketAdapter{client: client, bucket: name}, nil
 }
 
 func (c *S3Client) defaultClient() (S3API, error) {
