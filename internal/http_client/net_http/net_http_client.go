@@ -37,10 +37,7 @@ func NewNetHttpClient(opts ...HttpClientOption) (contracts.HttpClient, error) {
 // Do sends the provided request using the context and returns the response.
 func (c *netHttpClient) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	// build request (attach context, merge headers, resolve URL)
-	r, err := c.buildRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
+	r := c.buildRequest(ctx, req)
 
 	// perform the request (with optional circuit breaker)
 	// The URL is resolved and validated in buildRequest; this call issues
@@ -66,7 +63,7 @@ func (c *netHttpClient) mergeConfigHeaders(req *http.Request) {
 }
 
 // buildRequest constructs the final http.Request by attaching the context, merging headers, and resolving the URL against the base URL if necessary. This centralizes request preparation logic and ensures consistent behavior across all requests made by the client.
-func (c *netHttpClient) buildRequest(ctx context.Context, req *http.Request) (*http.Request, error) {
+func (c *netHttpClient) buildRequest(ctx context.Context, req *http.Request) *http.Request {
 	debugassert.Assert(req != nil, "http_client: request should not be nil")
 	r := req.WithContext(ctx)
 	c.mergeConfigHeaders(r)
@@ -75,5 +72,5 @@ func (c *netHttpClient) buildRequest(ctx context.Context, req *http.Request) (*h
 			r.URL = base.ResolveReference(r.URL)
 		}
 	}
-	return r, nil
+	return r
 }

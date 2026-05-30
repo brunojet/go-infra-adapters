@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNewCircuitBreakerConfig_NilOptionSkipped(t *testing.T) {
+	cfg := newCircuitBreakerConfig(nil, WithCircuitBreakerMaxFailures(3), nil)
+	assert.Equal(t, 3, cfg.MaxFailures)
+}
+
 func TestNewCircuitBreakerConfig_Defaults(t *testing.T) {
 	cfg := newCircuitBreakerConfig()
 	assert.Equal(t, 0, cfg.MaxFailures)

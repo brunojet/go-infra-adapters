@@ -7,7 +7,6 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	contracts "github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
 	gomock "github.com/golang/mock/gomock"
@@ -78,36 +77,6 @@ func (mr *MockBucketAdapterMockRecorder) HeadObject(ctx, key, objInfo interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeadObject", reflect.TypeOf((*MockBucketAdapter)(nil).HeadObject), ctx, key, objInfo)
 }
 
-// PresignGet mocks base method.
-func (m *MockBucketAdapter) PresignGet(ctx context.Context, key string, expires time.Duration) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PresignGet", ctx, key, expires)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PresignGet indicates an expected call of PresignGet.
-func (mr *MockBucketAdapterMockRecorder) PresignGet(ctx, key, expires interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PresignGet", reflect.TypeOf((*MockBucketAdapter)(nil).PresignGet), ctx, key, expires)
-}
-
-// PresignPut mocks base method.
-func (m *MockBucketAdapter) PresignPut(ctx context.Context, key string, expires time.Duration) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PresignPut", ctx, key, expires)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PresignPut indicates an expected call of PresignPut.
-func (mr *MockBucketAdapterMockRecorder) PresignPut(ctx, key, expires interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PresignPut", reflect.TypeOf((*MockBucketAdapter)(nil).PresignPut), ctx, key, expires)
-}
-
 // PutObject mocks base method.
 func (m *MockBucketAdapter) PutObject(ctx context.Context, obj *contracts.BucketObject) error {
 	m.ctrl.T.Helper()
@@ -158,19 +127,4 @@ func (m *MockStorageAPI) NewBucket(name string) (contracts.BucketAdapter, error)
 func (mr *MockStorageAPIMockRecorder) NewBucket(name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewBucket", reflect.TypeOf((*MockStorageAPI)(nil).NewBucket), name)
-}
-
-// NewBucketWithClient mocks base method.
-func (m *MockStorageAPI) NewBucketWithClient(name string, client contracts.StorageClientAPI) (contracts.BucketAdapter, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewBucketWithClient", name, client)
-	ret0, _ := ret[0].(contracts.BucketAdapter)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewBucketWithClient indicates an expected call of NewBucketWithClient.
-func (mr *MockStorageAPIMockRecorder) NewBucketWithClient(name, client interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewBucketWithClient", reflect.TypeOf((*MockStorageAPI)(nil).NewBucketWithClient), name, client)
 }
