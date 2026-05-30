@@ -64,6 +64,49 @@ func TestGetVersionWithStage_DescribeError(t *testing.T) {
 	}
 }
 
+// ── moveStage ────────────────────────────────────────────────────────────────
+
+func TestMoveStage_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v0": {"AWSPENDING"},
+				"v1": {},
+			},
+		}, nil,
+	).Times(1)
+	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
+	).Times(1)
+	api := &SecretAPI{client: client, logger: slog.Default()}
+	svc := NewSecrets[testPayload](api, "s")
+	if err := svc.moveStage(context.Background(), "AWSPENDING", "v1"); err != nil {
+		t.Fatalf("moveStage: %v", err)
+	}
+}
+
+func TestMoveStage_Idempotent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	client := mocksm.NewMockSecretsManagerClient(ctrl)
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v1": {"AWSCURRENT"},
+			},
+		}, nil,
+	).Times(1)
+	// No UpdateSecretVersionStage call (idempotent)
+	api := &SecretAPI{client: client, logger: slog.Default()}
+	svc := NewSecrets[testPayload](api, "s")
+	if err := svc.moveStage(context.Background(), "AWSCURRENT", "v1"); err != nil {
+		t.Fatalf("moveStage idempotent: %v", err)
+	}
+}
+
 // ── movePendingStage ──────────────────────────────────────────────────────────
 
 func TestMovePendingStage_Success(t *testing.T) {

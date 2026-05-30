@@ -112,6 +112,7 @@ func (s *SecretsService[T]) SetVersion(ctx context.Context, payload *T, version 
 // PromoteVersion moves the secret identified by version from AWSPENDING to AWSCURRENT.
 // Idempotent: if version is already AWSCURRENT, only the AWSPENDING stage is removed.
 func (s *SecretsService[T]) PromoteVersion(ctx context.Context, version string) error {
+	// Check if already AWSCURRENT to handle the idempotent case
 	currentVersion, err := s.getVersionWithStage(ctx, "AWSCURRENT")
 	if err != nil {
 		return fmt.Errorf("find current version: %w", err)
@@ -120,6 +121,8 @@ func (s *SecretsService[T]) PromoteVersion(ctx context.Context, version string) 
 		s.logger.Info("version already AWSCURRENT, removing AWSPENDING", "version", version, "secret", s.name)
 		return s.DiscardVersion(ctx, version)
 	}
+
+	// Move AWSCURRENT to the new version (handles removing from old version)
 	in := &secretsmanager.UpdateSecretVersionStageInput{
 		SecretId:        aws.String(s.name),
 		VersionStage:    aws.String("AWSCURRENT"),
