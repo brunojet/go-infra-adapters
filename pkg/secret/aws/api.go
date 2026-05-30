@@ -42,6 +42,7 @@ func NewSecretAPI(opts ...Option) (*SecretAPI, error) {
 
 // NewSecrets creates a type-safe SecretAdapter[T] for the named secret,
 // reusing the client held by api. T must be JSON-serialisable.
+// The returned adapter supports HealthCheck (via DescribeSecret) for initialization validation.
 // Complexity: O(n) where n = len(name). Memory: ~200 bytes for adapter + string reference.
 func NewSecrets[T any](api *SecretAPI, name string) contracts.SecretAdapter[T] {
 	return internalaws.NewSecrets[T](api, name)

@@ -28,4 +28,8 @@ type SecretAdapter[T any] interface {
 
 	// DiscardVersion removes a specific version by provider-specific id.
 	DiscardVersion(ctx context.Context, version string) error
+
+	// HealthCheck verifies that the secret exists and credentials are valid.
+	// Uses DescribeSecret which is lightweight and safe for initialization checks.
+	HealthCheck(ctx context.Context) error
 }
