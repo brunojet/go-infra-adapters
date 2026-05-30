@@ -1,4 +1,18 @@
-# CHANGELOG
+# Changelog
+
+## [2.0.0](https://github.com/brunojet/go-infra-adapters/compare/v1.0.0...v2.0.0) (2026-05-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* pkg/cloudfront/signer → pkg/crypto; pkg/provider removed
+
+### Code Refactoring
+
+* consolidate adapters, replace signer with crypto, simplify … ([4c8ce40](https://github.com/brunojet/go-infra-adapters/commit/4c8ce40ced09384c2a6fac793f93f0d19b9eca95))
+* consolidate adapters, replace signer with crypto, simplify provider ([440272c](https://github.com/brunojet/go-infra-adapters/commit/440272cb66e217a5dd59ed48a1ce2606d2e6c1dd))
+
+## CHANGELOG
 
 ## Unreleased
 
