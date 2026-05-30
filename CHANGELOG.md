@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0](https://github.com/brunojet/go-infra-adapters/compare/v3.0.0...v3.1.0) (2026-05-30)
+
+
+### Features
+
+* add mockgen mocks for public contract interfaces ([8d28f15](https://github.com/brunojet/go-infra-adapters/commit/8d28f15c8a6b66833a886206bf1df16d28b14415))
+* add mockgen-generated mocks for all public contract interfaces ([97c2ba3](https://github.com/brunojet/go-infra-adapters/commit/97c2ba301653a63cdd58b1a9dafd041a0d46cfc4))
+
 ## [3.0.0](https://github.com/brunojet/go-infra-adapters/compare/v2.0.0...v3.0.0) (2026-05-30)
 
 
