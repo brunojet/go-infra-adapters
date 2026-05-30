@@ -33,12 +33,9 @@ func (s *SecretsService[T]) moveStage(ctx context.Context, stage, toVersionID st
 	if err != nil {
 		return fmt.Errorf("find current %s: %w", stage, err)
 	}
-
-	// Idempotent: if toVersionID already has stage, nothing to do
 	if oldVersion == toVersionID {
 		return nil
 	}
-
 	in := &secretsmanager.UpdateSecretVersionStageInput{
 		SecretId:        aws.String(s.name),
 		VersionStage:    aws.String(stage),
