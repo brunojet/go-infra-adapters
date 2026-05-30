@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cfTypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/brunojet/go-infra-adapters/pkg/cdn/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
 )
 
 type cdnAdapter struct {

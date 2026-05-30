@@ -12,8 +12,8 @@ import (
 	cfTypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	"github.com/golang/mock/gomock"
 
-	mockcf "github.com/brunojet/go-infra-adapters/internal/cdn/aws/mock"
-	"github.com/brunojet/go-infra-adapters/pkg/cdn/contracts"
+	mockcf "github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws/mock"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
 )
 
 func newMock(t *testing.T) (*gomock.Controller, *mockcf.MockCloudFrontClient, *cdnAdapter) {

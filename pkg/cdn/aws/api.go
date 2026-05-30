@@ -5,8 +5,8 @@ package aws
 import (
 	"log/slog"
 
-	"github.com/brunojet/go-infra-adapters/internal/cdn/aws"
-	"github.com/brunojet/go-infra-adapters/pkg/cdn/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
 )
 
 // Option configures a CdnAPI instance. Use With* functions to create options.

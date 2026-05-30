@@ -13,8 +13,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/brunojet/go-infra-adapters/internal/storage/aws/s3/mock"
-	"github.com/brunojet/go-infra-adapters/pkg/storage/contracts"
+	"github.com/brunojet/go-infra-adapters/v3/internal/storage/aws/s3/mock"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/storage/contracts"
 )
 
 func injectS3LoadError(t *testing.T) func() {
