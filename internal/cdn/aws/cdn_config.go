@@ -8,7 +8,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry" // Public contract
+
 )
 
 // CloudFrontClient abstracts the CloudFront SDK operations.
