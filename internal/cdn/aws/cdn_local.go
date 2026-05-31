@@ -56,11 +56,7 @@ func (d *cdnAdapter) updateKeyGroup(ctx context.Context, groupID, newKeyID strin
 	}
 	keyIDs := deduplicateKeys(kg.KeyGroup.KeyGroupConfig.Items, newKeyID)
 	keep, evict := d.partitionKeysByAge(ctx, keyIDs)
-	for _, id := range evict {
-		if err := d.deletePublicKey(ctx, id); err != nil {
-			d.logger.Warn("failed to delete orphaned key", "id", id, "err", err)
-		}
-	}
+	// Update KeyGroup first to disassociate keys before deletion
 	input := &cloudfront.UpdateKeyGroupInput{
 		Id:      aws.String(groupID),
 		IfMatch: kg.ETag,
@@ -73,6 +69,12 @@ func (d *cdnAdapter) updateKeyGroup(ctx context.Context, groupID, newKeyID strin
 		return fmt.Errorf("update key group: %w", err)
 	}
 	d.logger.Info("KeyGroup updated", "id", groupID, "kept", len(keep), "evicted", len(evict))
+	// Delete orphaned keys after disassociation from KeyGroup
+	for _, id := range evict {
+		if err := d.deletePublicKey(ctx, id); err != nil {
+			d.logger.Warn("failed to delete orphaned key", "id", id, "err", err)
+		}
+	}
 	return nil
 }
 
