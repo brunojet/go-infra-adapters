@@ -148,6 +148,15 @@ func TestSecretsService_SetVersion_Success(t *testing.T) {
 	client.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.PutSecretValueOutput{VersionId: aws.String("v-new")}, nil,
 	)
+	// movePendingStage calls DescribeSecret to find existing AWSPENDING
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{
+				"v-old": {"AWSPENDING"},
+				"v-new": {},
+			},
+		}, nil,
+	)
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
 	)
@@ -162,6 +171,12 @@ func TestSecretsService_SetVersion_EmptyVersionToken(t *testing.T) {
 	defer ctrl.Finish()
 	client.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.PutSecretValueOutput{VersionId: aws.String("aws-gen")}, nil,
+	)
+	// movePendingStage calls DescribeSecret to find existing AWSPENDING
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{},
+		}, nil,
 	)
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
@@ -188,6 +203,13 @@ func TestSecretsService_SetVersion_MovePendingError(t *testing.T) {
 	client.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.PutSecretValueOutput{VersionId: aws.String("v1")}, nil,
 	)
+	// movePendingStage calls DescribeSecret first
+	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
+		&secretsmanager.DescribeSecretOutput{
+			VersionIdsToStages: map[string][]string{},
+		}, nil,
+	)
+	// Then UpdateSecretVersionStage fails
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(nil, errors.New("stage error"))
 	_, err := svc.SetVersion(context.Background(), &testPayload{}, "v1")
 	if err == nil {
@@ -216,14 +238,16 @@ func TestSecretsService_SetVersion_MarshalError(t *testing.T) {
 func TestSecretsService_PromoteVersion_Success(t *testing.T) {
 	ctrl, client, svc := newMockSvc(t)
 	defer ctrl.Finish()
+	// DescribeSecret in moveStage to find current AWSCURRENT
 	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.DescribeSecretOutput{
 			VersionIdsToStages: map[string][]string{"curr-v1": {"AWSCURRENT"}},
 		}, nil,
 	)
+	// First UpdateSecretVersionStage in moveStage to move AWSCURRENT
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
-	)
+	).Times(2) // moveStage + DiscardVersion
 	if err := svc.PromoteVersion(context.Background(), "pend-v2"); err != nil {
 		t.Fatalf("PromoteVersion: %v", err)
 	}
@@ -232,12 +256,14 @@ func TestSecretsService_PromoteVersion_Success(t *testing.T) {
 func TestSecretsService_PromoteVersion_NoPreviousCurrent(t *testing.T) {
 	ctrl, client, svc := newMockSvc(t)
 	defer ctrl.Finish()
+	// DescribeSecret in moveStage (no existing AWSCURRENT)
 	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.DescribeSecretOutput{VersionIdsToStages: map[string][]string{}}, nil,
 	)
+	// UpdateSecretVersionStage called twice: moveStage to set AWSCURRENT + DiscardVersion to remove AWSPENDING
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
-	)
+	).Times(2)
 	if err := svc.PromoteVersion(context.Background(), "pend-v1"); err != nil {
 		t.Fatalf("PromoteVersion no current: %v", err)
 	}
@@ -246,11 +272,14 @@ func TestSecretsService_PromoteVersion_NoPreviousCurrent(t *testing.T) {
 func TestSecretsService_PromoteVersion_AlreadyCurrent(t *testing.T) {
 	ctrl, client, svc := newMockSvc(t)
 	defer ctrl.Finish()
+	// DescribeSecret in moveStage to find current AWSCURRENT
 	client.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.DescribeSecretOutput{
 			VersionIdsToStages: map[string][]string{"v1": {"AWSCURRENT"}},
 		}, nil,
 	)
+	// moveStage finds v1 already has AWSCURRENT, idempotent check returns nil (no UpdateSecretVersionStage)
+	// Only DiscardVersion calls UpdateSecretVersionStage to remove AWSPENDING
 	client.EXPECT().UpdateSecretVersionStage(gomock.Any(), gomock.Any()).Return(
 		&secretsmanager.UpdateSecretVersionStageOutput{}, nil,
 	)
