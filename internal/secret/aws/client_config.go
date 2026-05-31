@@ -7,6 +7,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
+	awsretryer "github.com/brunojet/go-infra-adapters/v3/internal/retryer/aws"
 	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
@@ -82,10 +83,15 @@ var smLoadConfig = func(cfg *SecretsConfig) (SecretsManagerClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	sdkRetryer := awsretryer.NewSDKRetryer(cfg.retryStrategy, cfg.logger)
+	cfg.logger.Info("SecretsManager client configured with retry strategy",
+		"maxAttempts", cfg.retryStrategy.MaxAttempts())
+
 	return secretsmanager.NewFromConfig(awsCfg, func(o *secretsmanager.Options) {
 		if cfg.endpoint != "" {
 			o.BaseEndpoint = &cfg.endpoint
 		}
+		o.Retryer = sdkRetryer
 	}), nil
 }
 

@@ -8,8 +8,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry" // Public contract
-
+	awsretryer "github.com/brunojet/go-infra-adapters/v3/internal/retryer/aws"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
 // CloudFrontClient abstracts the CloudFront SDK operations.
@@ -113,5 +113,10 @@ func newCdnClient(cfg *cdnConfig) CloudFrontClient {
 	if err != nil {
 		panic("failed to load AWS config: " + err.Error())
 	}
-	return cloudfront.NewFromConfig(awsCfg)
+	sdkRetryer := awsretryer.NewSDKRetryer(cfg.retryStrategy, cfg.logger)
+	cfg.logger.Info("CloudFront client configured with retry strategy",
+		"maxAttempts", cfg.retryStrategy.MaxAttempts())
+	return cloudfront.NewFromConfig(awsCfg, func(o *cloudfront.Options) {
+		o.Retryer = sdkRetryer
+	})
 }

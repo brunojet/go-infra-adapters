@@ -35,12 +35,11 @@ func TestNewConfig_NilOption(t *testing.T) {
 	require.NotNil(t, cfg)
 }
 
-// TestNewSecretClient_Wiring verifies that smLoadConfig succeeds in CI.
+// TestNewSecretClient_Wiring verifies that newConfig succeeds in CI.
 func TestNewSecretClient_Wiring(t *testing.T) {
-	cfg := &SecretsConfig{region: "us-east-1", endpoint: "http://localhost"}
-	c, err := smLoadConfig(cfg)
+	api, err := newConfig(WithRegion("us-east-1"), WithEndpoint("http://localhost"))
 	require.NoError(t, err)
-	if c == nil {
+	if api == nil {
 		t.Fatalf("expected secretsmanager client")
 	}
 }

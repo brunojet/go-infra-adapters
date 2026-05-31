@@ -131,7 +131,8 @@ func TestNewCdnClient_CreatesClient(t *testing.T) {
 	orig := cdnAwsConfigLoader
 	cdnAwsConfigLoader = func() (goaws.Config, error) { return goaws.Config{}, nil }
 	defer func() { cdnAwsConfigLoader = orig }()
-	c := newCdnClient(&cdnConfig{})
+	cfg := newCdnConfig()
+	c := newCdnClient(cfg)
 	if c == nil {
 		t.Fatal("expected non-nil client")
 	}

@@ -2,8 +2,6 @@
 package retry
 
 import (
-	"fmt"
-	"log/slog"
 	"time"
 )
 
@@ -92,41 +90,6 @@ func (n *NoRetry) MaxAttempts() int {
 // BackoffFor returns 0.
 func (n *NoRetry) BackoffFor(attempt int) time.Duration {
 	return 0
-}
-
-// Execute runs the given operation with retry logic and logging.
-// Logs each attempt, error classification, and backoff duration.
-func (s *Standard) Execute(operation func() error, logger *slog.Logger) error {
-	for attempt := 1; attempt <= s.MaxAttempts(); attempt++ {
-		err := operation()
-		if err == nil {
-			logger.Debug("operation succeeded", "attempt", attempt)
-			return nil
-		}
-
-		retryable := s.IsRetryable(err)
-		logger.Warn("operation failed",
-			"attempt", attempt,
-			"maxAttempts", s.MaxAttempts(),
-			"error", err.Error(),
-			"retryable", retryable)
-
-		if !retryable {
-			logger.Debug("error not retryable, giving up", "error", err.Error())
-			return err
-		}
-
-		if attempt < s.MaxAttempts() {
-			backoff := s.BackoffFor(attempt)
-			logger.Debug("retrying operation",
-				"attempt", attempt,
-				"nextAttempt", attempt+1,
-				"backoffDuration", backoff.String(),
-				"error", err.Error())
-			time.Sleep(backoff)
-		}
-	}
-	return fmt.Errorf("max attempts (%d) exceeded", s.MaxAttempts())
 }
 
 // contains checks if a string contains a substring (case-insensitive helper).

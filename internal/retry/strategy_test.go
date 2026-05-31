@@ -17,9 +17,9 @@ func TestStandardRetryStrategy(t *testing.T) {
 
 	t.Run("IsRetryable", func(t *testing.T) {
 		tests := []struct {
-			name  string
-			err   error
-			want  bool
+			name string
+			err  error
+			want bool
 		}{
 			{"nil error", nil, false},
 			{"5xx error", errors.New("StatusCode: 500"), true},
