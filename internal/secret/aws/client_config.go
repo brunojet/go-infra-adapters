@@ -6,6 +6,8 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
 type SecretsOption func(*SecretsConfig)
@@ -18,10 +20,11 @@ type SecretsManagerClient interface {
 }
 
 type SecretsConfig struct {
-	client   SecretsManagerClient
-	logger   *slog.Logger
-	region   string
-	endpoint string
+	client        SecretsManagerClient
+	logger        *slog.Logger
+	region        string
+	endpoint      string
+	retryStrategy retry.Strategy
 }
 
 func WithClient(client SecretsManagerClient) SecretsOption {
@@ -56,6 +59,16 @@ func WithLogger(logger *slog.Logger) SecretsOption {
 	}
 }
 
+// WithRetryStrategy sets the retry strategy for Secrets Manager API calls.
+func WithRetryStrategy(strategy retry.Strategy) SecretsOption {
+	return func(cfg *SecretsConfig) {
+		if strategy == nil {
+			panic("retry strategy cannot be nil")
+		}
+		cfg.retryStrategy = strategy
+	}
+}
+
 // awsLoadDefaultConfig wraps awsconfig.LoadDefaultConfig; replaceable in tests.
 var awsLoadDefaultConfig = awsconfig.LoadDefaultConfig
 
@@ -80,7 +93,8 @@ var smLoadConfig = func(cfg *SecretsConfig) (SecretsManagerClient, error) {
 // Returns an error if no client was injected and the AWS SDK cannot be initialized.
 func newConfig(opts ...SecretsOption) (*SecretsConfig, error) {
 	cfg := &SecretsConfig{
-		logger: slog.Default(),
+		logger:        slog.Default(),
+		retryStrategy: retry.NewStandard(), // Default: 3 attempts with exponential backoff
 	}
 	for _, opt := range opts {
 		if opt != nil {
