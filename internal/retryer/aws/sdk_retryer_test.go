@@ -58,8 +58,8 @@ func TestSDKRetryer(t *testing.T) {
 
 	t.Run("MaxAttempts", func(t *testing.T) {
 		attempts := retryer.MaxAttempts()
-		if attempts != 3 {
-			t.Fatalf("expected 3 attempts, got %d", attempts)
+		if attempts != 2 {
+			t.Fatalf("expected 2 attempts, got %d", attempts)
 		}
 	})
 

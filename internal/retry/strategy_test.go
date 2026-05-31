@@ -10,8 +10,8 @@ func TestStandardRetryStrategy(t *testing.T) {
 	s := NewStandard()
 
 	t.Run("MaxAttempts", func(t *testing.T) {
-		if s.MaxAttempts() != 3 {
-			t.Fatalf("expected 3, got %d", s.MaxAttempts())
+		if s.MaxAttempts() != 2 {
+			t.Fatalf("expected 2, got %d", s.MaxAttempts())
 		}
 	})
 
@@ -48,7 +48,6 @@ func TestStandardRetryStrategy(t *testing.T) {
 			{0, 0},
 			{1, 500 * time.Millisecond},
 			{2, 1 * time.Second},
-			{3, 2 * time.Second},
 		}
 
 		for _, tt := range tests {

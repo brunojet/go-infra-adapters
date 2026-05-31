@@ -17,16 +17,16 @@ type Strategy interface {
 }
 
 // Standard implements Strategy with sensible defaults.
-// 3 attempts with exponential backoff (500ms, 1s, 2s).
+// 2 attempts with exponential backoff (500ms, 1s).
 type Standard struct {
 	maxAttempts int
 	baseBackoff time.Duration
 }
 
-// NewStandard creates a Standard retry strategy with 3 attempts.
+// NewStandard creates a Standard retry strategy with 2 attempts.
 func NewStandard() *Standard {
 	return &Standard{
-		maxAttempts: 3,
+		maxAttempts: 2,
 		baseBackoff: 500 * time.Millisecond,
 	}
 }
@@ -62,7 +62,7 @@ func (s *Standard) MaxAttempts() int {
 	return s.maxAttempts
 }
 
-// BackoffFor returns exponential backoff: 500ms, 1s, 2s.
+// BackoffFor returns exponential backoff: 500ms, 1s.
 func (s *Standard) BackoffFor(attempt int) time.Duration {
 	if attempt < 1 {
 		return 0
@@ -70,7 +70,6 @@ func (s *Standard) BackoffFor(attempt int) time.Duration {
 	// 2^(attempt-1) * baseBackoff
 	// attempt 1: 500ms
 	// attempt 2: 1s
-	// attempt 3: 2s
 	multiplier := 1 << uint(attempt-1) // 2^(attempt-1)
 	return time.Duration(multiplier) * s.baseBackoff
 }

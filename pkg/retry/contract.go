@@ -18,12 +18,12 @@ type Strategy interface {
 	BackoffFor(attempt int) time.Duration
 }
 
-// NewStandard creates a Standard retry strategy with 3 attempts.
+// NewStandard creates a Standard retry strategy with 2 attempts.
 // Suitable for AWS API calls with transient failures (5xx, 429, 409).
 //
-// Attempts: 3
-// Backoff: exponential (500ms, 1s, 2s)
-// Retryable errors: 5xx, 429, 409, timeouts, connection errors
+// Attempts: 2 (initial + 1 retry)
+// Backoff: exponential (500ms, 1s)
+// Retryable errors: 5xx, 429, 409, connection errors
 func NewStandard() Strategy {
 	return retry.NewStandard()
 }
