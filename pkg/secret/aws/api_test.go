@@ -7,6 +7,7 @@ import (
 	"github.com/golang/mock/gomock"
 
 	mocksm "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws/mock"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
 func TestOptionsWrappers_NotNil(t *testing.T) {
@@ -23,6 +24,12 @@ func TestExists_pkg_secret_aws_options(t *testing.T) {}
 func TestWithLogger_NotNil(t *testing.T) {
 	if WithLogger(slog.Default()) == nil {
 		t.Fatalf("WithLogger returned nil")
+	}
+}
+
+func TestWithRetryStrategy_NotNil(t *testing.T) {
+	if WithRetryStrategy(retry.NewStandard()) == nil {
+		t.Fatalf("WithRetryStrategy returned nil")
 	}
 }
 

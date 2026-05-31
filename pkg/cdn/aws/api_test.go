@@ -7,6 +7,7 @@ import (
 	"github.com/golang/mock/gomock"
 
 	mockcf "github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws/mock"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
 func TestWithClient_NotNil(t *testing.T) {
@@ -33,6 +34,12 @@ func TestWithConcurrency_NotNil(t *testing.T) {
 func TestWithLogger_NotNil(t *testing.T) {
 	if WithLogger(slog.Default()) == nil {
 		t.Fatalf("WithLogger returned nil")
+	}
+}
+
+func TestWithRetryStrategy_NotNil(t *testing.T) {
+	if WithRetryStrategy(retry.NewStandard()) == nil {
+		t.Fatalf("WithRetryStrategy returned nil")
 	}
 }
 

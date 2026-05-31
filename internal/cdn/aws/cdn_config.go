@@ -7,6 +7,9 @@ import (
 	goaws "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+
+	awsretryer "github.com/brunojet/go-infra-adapters/v3/internal/retryer/aws"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 )
 
 // CloudFrontClient abstracts the CloudFront SDK operations.
@@ -26,10 +29,11 @@ type CdnOption func(*cdnConfig)
 
 // cdnConfig implements KeyDistribution using the AWS CloudFront API.
 type cdnConfig struct {
-	client      CloudFrontClient
-	maxKeys     int
-	concurrency int
-	logger      *slog.Logger
+	client        CloudFrontClient
+	maxKeys       int
+	concurrency   int
+	logger        *slog.Logger
+	retryStrategy retry.Strategy
 }
 
 // WithMaxKeys sets the maximum number of keys to keep in a key group.
@@ -71,11 +75,22 @@ func WithClient(client CloudFrontClient) CdnOption {
 	}
 }
 
+// WithRetryStrategy sets the retry strategy for CloudFront API calls.
+func WithRetryStrategy(strategy retry.Strategy) CdnOption {
+	return func(d *cdnConfig) {
+		if strategy == nil {
+			panic("retry strategy cannot be nil")
+		}
+		d.retryStrategy = strategy
+	}
+}
+
 func newCdnConfig(opts ...CdnOption) *cdnConfig {
 	d := &cdnConfig{
-		maxKeys:     3,
-		concurrency: 5,
-		logger:      slog.Default(),
+		maxKeys:       3,
+		concurrency:   5,
+		logger:        slog.Default(),
+		retryStrategy: retry.NewStandard(), // Default: 3 attempts with exponential backoff
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -98,5 +113,10 @@ func newCdnClient(cfg *cdnConfig) CloudFrontClient {
 	if err != nil {
 		panic("failed to load AWS config: " + err.Error())
 	}
-	return cloudfront.NewFromConfig(awsCfg)
+	sdkRetryer := awsretryer.NewSDKRetryer(cfg.retryStrategy, cfg.logger)
+	cfg.logger.Info("CloudFront client configured with retry strategy",
+		"maxAttempts", cfg.retryStrategy.MaxAttempts())
+	return cloudfront.NewFromConfig(awsCfg, func(o *cloudfront.Options) {
+		o.Retryer = sdkRetryer
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	internalaws "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
 	"github.com/brunojet/go-infra-adapters/v3/pkg/secret/contracts"
 )
 
@@ -32,6 +33,11 @@ func WithEndpoint(endpoint string) Option { return internalaws.WithEndpoint(endp
 
 // WithLogger configures a structured logger. A nil logger falls back to slog.Default().
 func WithLogger(logger *slog.Logger) Option { return internalaws.WithLogger(logger) }
+
+// WithRetryStrategy sets the retry strategy for Secrets Manager API calls.
+func WithRetryStrategy(strategy retry.Strategy) Option {
+	return internalaws.WithRetryStrategy(strategy)
+}
 
 // NewSecretAPI constructs a SecretAPI backed by AWS Secrets Manager.
 // Returns an error if no client is injected and the SDK cannot initialize.
