@@ -25,7 +25,6 @@ func TestStandardRetryStrategy(t *testing.T) {
 			{"5xx error", errors.New("StatusCode: 500"), true},
 			{"429 throttling", errors.New("StatusCode: 429"), true},
 			{"409 conflict", errors.New("StatusCode: 409"), true},
-			{"timeout", errors.New("context deadline exceeded: timeout"), true},
 			{"connection refused", errors.New("connection refused"), true},
 			{"4xx other", errors.New("StatusCode: 400"), false},
 			{"non-retryable", errors.New("validation error"), false},

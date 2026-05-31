@@ -2,6 +2,7 @@
 package retry
 
 import (
+	"strings"
 	"time"
 )
 
@@ -38,19 +39,19 @@ func (s *Standard) IsRetryable(err error) bool {
 	// Check for common transient AWS errors
 	errStr := err.Error()
 	// 5xx server errors
-	if contains(errStr, "StatusCode: 5") {
+	if strings.Contains(errStr, "StatusCode: 5") {
 		return true
 	}
 	// 429 throttling
-	if contains(errStr, "StatusCode: 429") {
+	if strings.Contains(errStr, "StatusCode: 429") {
 		return true
 	}
 	// 409 Conflict (for DeletePublicKey when key still in use)
-	if contains(errStr, "StatusCode: 409") {
+	if strings.Contains(errStr, "StatusCode: 409") {
 		return true
 	}
-	// Connection timeouts
-	if contains(errStr, "timeout") || contains(errStr, "connection refused") {
+	// Connection refused
+	if strings.Contains(errStr, "connection refused") {
 		return true
 	}
 	return false
@@ -90,14 +91,4 @@ func (n *NoRetry) MaxAttempts() int {
 // BackoffFor returns 0.
 func (n *NoRetry) BackoffFor(attempt int) time.Duration {
 	return 0
-}
-
-// contains checks if a string contains a substring (case-insensitive helper).
-func contains(haystack, needle string) bool {
-	for i := 0; i <= len(haystack)-len(needle); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
 }
