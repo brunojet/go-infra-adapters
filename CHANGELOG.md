@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.1](https://github.com/brunojet/go-infra-adapters/compare/v3.2.0...v3.2.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* delete orphaned keys after removing from KeyGroup ([32536fd](https://github.com/brunojet/go-infra-adapters/commit/32536fd83a957fde8c12f05e5c903a0a42e1c65f))
+* delete orphaned keys after removing from KeyGroup ([c18326c](https://github.com/brunojet/go-infra-adapters/commit/c18326c1eddec7131b0b779eb4684a58d9bdd850))
+
 ## [3.2.0](https://github.com/brunojet/go-infra-adapters/compare/v3.1.2...v3.2.0) (2026-05-31)
 
 
