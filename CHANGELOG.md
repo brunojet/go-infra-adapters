@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.1.2](https://github.com/brunojet/go-infra-adapters/compare/v3.1.1...v3.1.2) (2026-05-31)
+
+
+### Bug Fixes
+
+* remove previous AWSPENDING stage before moving to new version ([80f48a2](https://github.com/brunojet/go-infra-adapters/commit/80f48a294ec1b82e67995752592756aef5ce8107))
+* remove previous AWSPENDING stage before moving to new version ([6bf95a0](https://github.com/brunojet/go-infra-adapters/commit/6bf95a03694660f074701611c47965e1f8cdad00))
+
+
+### Code Refactoring
+
+* extract moveStage generic helper to reduce duplication ([821a383](https://github.com/brunojet/go-infra-adapters/commit/821a383d0a38d634b477339b87c5ed8070fc590f))
+* Simplify PromoteVersion after moveStage guarantees AWSCURRENT ([c33f93d](https://github.com/brunojet/go-infra-adapters/commit/c33f93de06ba436e39fc41e0bae096296eb5ab64))
+
 ## [3.1.1](https://github.com/brunojet/go-infra-adapters/compare/v3.1.0...v3.1.1) (2026-05-30)
 
 
