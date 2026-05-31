@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.0](https://github.com/brunojet/go-infra-adapters/compare/v3.1.2...v3.2.0) (2026-05-31)
+
+
+### Features
+
+* add retry strategy abstraction for CDN and Secret clients ([2a50319](https://github.com/brunojet/go-infra-adapters/commit/2a50319ebb86aba4e102137a2de05ebfa5dda2a5))
+* integrate retry strategy into AWS SDK native retry mechanism ([b986ca7](https://github.com/brunojet/go-infra-adapters/commit/b986ca7a86f17779fb411a7524a9eb91fd32e052))
+
+
+### Code Refactoring
+
+* move retry implementation to internal, add logging ([6a015d7](https://github.com/brunojet/go-infra-adapters/commit/6a015d78e438714ecd88aadc02ead87fe8b69c0d))
+* reduce default retry attempts from 3 to 2 ([302b645](https://github.com/brunojet/go-infra-adapters/commit/302b64554390fd8fad517f16030afc715f83f9c3))
+* use strings.Contains and remove timeout from IsRetryable ([cf98cc4](https://github.com/brunojet/go-infra-adapters/commit/cf98cc4ae2c7c399f9268019afefc1703ef8ec51))
+
 ## [3.1.2](https://github.com/brunojet/go-infra-adapters/compare/v3.1.1...v3.1.2) (2026-05-31)
 
 
