@@ -9,18 +9,23 @@ import (
 	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
 
-type (
-	KeyGenerator = contracts.KeyGenerator
-	Signer       = contracts.Signer
-	Verifier     = contracts.Verifier
-)
+// KeyGenerator is a re-export of contracts.KeyGenerator for convenience.
+type KeyGenerator = contracts.KeyGenerator
 
-// Hash algorithm constants
-const (
-	SHA1   = contracts.SHA1
-	SHA256 = contracts.SHA256
-	SHA512 = contracts.SHA512
-)
+// Signer is a re-export of contracts.Signer for convenience.
+type Signer = contracts.Signer
+
+// Verifier is a re-export of contracts.Verifier for convenience.
+type Verifier = contracts.Verifier
+
+// SHA1 is SHA-1 hashing algorithm (required for AWS CloudFront signing).
+const SHA1 = contracts.SHA1
+
+// SHA256 is SHA-256 hashing algorithm (default for general-purpose signing).
+const SHA256 = contracts.SHA256
+
+// SHA512 is SHA-512 hashing algorithm (high-security requirements).
+const SHA512 = contracts.SHA512
 
 // NewRSAKeyGenerator returns a KeyGenerator that produces RSA key pairs of the
 // given bit size (minimum 2048).
