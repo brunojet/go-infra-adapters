@@ -8,7 +8,9 @@ import (
 	stdcrypto "crypto"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
@@ -92,10 +94,15 @@ func NewRSASignerFromPEM(privateKeyPEM []byte) (*RSASigner, error) {
 	return &RSASigner{priv: priv}, nil
 }
 
-// Sign hashes the payload with SHA-256 and produces an RSA-PKCS1v15 signature.
-func (s *RSASigner) Sign(_ context.Context, payload []byte) ([]byte, error) {
-	h := sha256.Sum256(payload)
-	sig, err := rsaSignPKCS1v15(cryptoRandReader, s.priv, stdcrypto.SHA256, h[:])
+// Sign hashes the payload with the specified algorithm and produces an RSA-PKCS1v15 signature.
+func (s *RSASigner) Sign(_ context.Context, hashAlgo contracts.HashAlgorithm, payload []byte) ([]byte, error) {
+	cryptoHash, hashFn, err := hashAlgoToCrypto(hashAlgo)
+	if err != nil {
+		return nil, err
+	}
+
+	h := hashFn(payload)
+	sig, err := rsaSignPKCS1v15(cryptoRandReader, s.priv, cryptoHash, h)
 	if err != nil {
 		return nil, fmt.Errorf("rsa sign: %w", err)
 	}
@@ -127,16 +134,45 @@ func NewRSAVerifierFromPEM(publicKeyPEM []byte) (*RSAVerifier, error) {
 	return &RSAVerifier{pub: rsaPub}, nil
 }
 
-// Verify reports nil if signature is a valid RSA-PKCS1v15-SHA256 signature over payload.
-func (v *RSAVerifier) Verify(_ context.Context, payload, signature []byte) error {
-	h := sha256.Sum256(payload)
-	if err := rsa.VerifyPKCS1v15(v.pub, stdcrypto.SHA256, h[:], signature); err != nil {
+// Verify reports nil if signature is a valid RSA-PKCS1v15 signature with the specified hash algorithm.
+func (v *RSAVerifier) Verify(_ context.Context, hashAlgo contracts.HashAlgorithm, payload, signature []byte) error {
+	cryptoHash, hashFn, err := hashAlgoToCrypto(hashAlgo)
+	if err != nil {
+		return err
+	}
+
+	h := hashFn(payload)
+	if err := rsa.VerifyPKCS1v15(v.pub, cryptoHash, h, signature); err != nil {
 		return fmt.Errorf("verify signature: %w", err)
 	}
 	return nil
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// hashAlgoToCrypto converts a contracts.HashAlgorithm to stdlib crypto.Hash and hash function.
+// Returns crypto.Hash enum, hash function returning hash digest, and error.
+func hashAlgoToCrypto(algo contracts.HashAlgorithm) (stdcrypto.Hash, func([]byte) []byte, error) {
+	switch algo {
+	case contracts.SHA256:
+		return stdcrypto.SHA256, func(data []byte) []byte {
+			h := sha256.Sum256(data)
+			return h[:]
+		}, nil
+	case contracts.SHA1:
+		return stdcrypto.SHA1, func(data []byte) []byte {
+			h := sha1.Sum(data)
+			return h[:]
+		}, nil
+	case contracts.SHA512:
+		return stdcrypto.SHA512, func(data []byte) []byte {
+			h := sha512.Sum512(data)
+			return h[:]
+		}, nil
+	default:
+		return 0, nil, fmt.Errorf("unsupported hash algorithm: %v", algo)
+	}
+}
 
 // parseRSAPrivateKey decodes a PEM-encoded RSA private key.
 // Tries PKCS1 first (block type "RSA PRIVATE KEY"), then PKCS8 ("PRIVATE KEY").

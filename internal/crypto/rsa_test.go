@@ -68,7 +68,7 @@ func TestRSASigner_Sign(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRSASignerFromPEM: %v", err)
 	}
-	sig, err := s.Sign(bg, []byte("hello world"))
+	sig, err := s.Sign(bg, contracts.SHA256, []byte("hello world"))
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestRSASigner_Sign(t *testing.T) {
 func TestRSASigner_DifferentPayloads_DifferentSignatures(t *testing.T) {
 	kp := mustGenKP(t)
 	s, _ := NewRSASignerFromPEM(kp.PrivatePEM)
-	sig1, _ := s.Sign(bg, []byte("payload-a"))
-	sig2, _ := s.Sign(bg, []byte("payload-b"))
+	sig1, _ := s.Sign(bg, contracts.SHA256, []byte("payload-a"))
+	sig2, _ := s.Sign(bg, contracts.SHA256, []byte("payload-b"))
 	if bytes.Equal(sig1, sig2) {
 		t.Fatal("different payloads produced the same signature")
 	}
@@ -99,7 +99,7 @@ func TestRSASigner_AcceptsPKCS8(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected PKCS8 to parse: %v", err)
 	}
-	if _, err := s.Sign(bg, []byte("data")); err != nil {
+	if _, err := s.Sign(bg, contracts.SHA256, []byte("data")); err != nil {
 		t.Fatalf("Sign with PKCS8 key: %v", err)
 	}
 }
@@ -138,8 +138,8 @@ func TestRSAVerifier_Verify_Valid(t *testing.T) {
 		t.Fatalf("NewRSAVerifierFromPEM: %v", err)
 	}
 	payload := []byte("content to sign")
-	sig, _ := signer.Sign(bg, payload)
-	if err := verifier.Verify(bg, payload, sig); err != nil {
+	sig, _ := signer.Sign(bg, contracts.SHA256, payload)
+	if err := verifier.Verify(bg, contracts.SHA256, payload, sig); err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
 }
@@ -149,8 +149,8 @@ func TestRSAVerifier_Verify_TamperedPayload(t *testing.T) {
 	signer, _ := NewRSASignerFromPEM(kp.PrivatePEM)
 	verifier, _ := NewRSAVerifierFromPEM(kp.PublicPEM)
 
-	sig, _ := signer.Sign(bg, []byte("original"))
-	if err := verifier.Verify(bg, []byte("tampered"), sig); err == nil {
+	sig, _ := signer.Sign(bg, contracts.SHA256, []byte("original"))
+	if err := verifier.Verify(bg, contracts.SHA256, []byte("tampered"), sig); err == nil {
 		t.Fatal("expected error for tampered payload")
 	}
 }
@@ -160,9 +160,9 @@ func TestRSAVerifier_Verify_TamperedSignature(t *testing.T) {
 	signer, _ := NewRSASignerFromPEM(kp.PrivatePEM)
 	verifier, _ := NewRSAVerifierFromPEM(kp.PublicPEM)
 
-	sig, _ := signer.Sign(bg, []byte("data"))
+	sig, _ := signer.Sign(bg, contracts.SHA256, []byte("data"))
 	sig[0] ^= 0xFF // flip bits in first byte
-	if err := verifier.Verify(bg, []byte("data"), sig); err == nil {
+	if err := verifier.Verify(bg, contracts.SHA256, []byte("data"), sig); err == nil {
 		t.Fatal("expected error for tampered signature")
 	}
 }
@@ -173,8 +173,8 @@ func TestRSAVerifier_Verify_WrongKey(t *testing.T) {
 	signer, _ := NewRSASignerFromPEM(kp1.PrivatePEM)
 	verifier, _ := NewRSAVerifierFromPEM(kp2.PublicPEM) // different key pair
 
-	sig, _ := signer.Sign(bg, []byte("data"))
-	if err := verifier.Verify(bg, []byte("data"), sig); err == nil {
+	sig, _ := signer.Sign(bg, contracts.SHA256, []byte("data"))
+	if err := verifier.Verify(bg, contracts.SHA256, []byte("data"), sig); err == nil {
 		t.Fatal("expected error when verifying with wrong public key")
 	}
 }
@@ -217,7 +217,7 @@ func TestSign_RandError(t *testing.T) {
 	}
 	defer func() { rsaSignPKCS1v15 = orig }()
 
-	_, err := s.Sign(bg, []byte("data"))
+	_, err := s.Sign(bg, contracts.SHA256, []byte("data"))
 	if err == nil || !strings.Contains(err.Error(), "rsa sign") {
 		t.Fatalf("expected rsa sign error, got %v", err)
 	}
@@ -262,6 +262,97 @@ func TestParseRSAPrivateKey_BothFail(t *testing.T) {
 	_, err := parseRSAPrivateKey(pemData)
 	if err == nil || !strings.Contains(err.Error(), "failed to parse private key") {
 		t.Fatalf("expected both-fail error, got %v", err)
+	}
+}
+
+// ── hash algorithm tests ────────────────────────────────────────────────────────
+
+func TestRSASigner_SignWithDifferentHashAlgorithms(t *testing.T) {
+	kp := mustGenKP(t)
+	s, _ := NewRSASignerFromPEM(kp.PrivatePEM)
+	payload := []byte("test data")
+
+	tests := []struct {
+		name      string
+		hashAlgo  contracts.HashAlgorithm
+		shouldErr bool
+	}{
+		{"SHA256", contracts.SHA256, false},
+		{"SHA1", contracts.SHA1, false},
+		{"SHA512", contracts.SHA512, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig, err := s.Sign(bg, tt.hashAlgo, payload)
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Sign failed: %v", err)
+				}
+				if len(sig) == 0 {
+					t.Fatal("expected non-empty signature")
+				}
+			}
+		})
+	}
+}
+
+func TestRSASigner_VerifyWithDifferentHashAlgorithms(t *testing.T) {
+	kp := mustGenKP(t)
+	signer, _ := NewRSASignerFromPEM(kp.PrivatePEM)
+	verifier, _ := NewRSAVerifierFromPEM(kp.PublicPEM)
+	payload := []byte("test data")
+
+	tests := []struct {
+		name      string
+		hashAlgo  contracts.HashAlgorithm
+		shouldErr bool
+	}{
+		{"SHA256", contracts.SHA256, false},
+		{"SHA1", contracts.SHA1, false},
+		{"SHA512", contracts.SHA512, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig, _ := signer.Sign(bg, tt.hashAlgo, payload)
+			err := verifier.Verify(bg, tt.hashAlgo, payload, sig)
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Verify failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestRSASigner_InvalidHashAlgorithm(t *testing.T) {
+	kp := mustGenKP(t)
+	s, _ := NewRSASignerFromPEM(kp.PrivatePEM)
+
+	// Use an invalid hash algorithm value
+	_, err := s.Sign(bg, contracts.HashAlgorithm(999), []byte("data"))
+	if err == nil || !strings.Contains(err.Error(), "unsupported hash algorithm") {
+		t.Fatalf("expected unsupported hash algorithm error, got %v", err)
+	}
+}
+
+func TestRSAVerifier_InvalidHashAlgorithm(t *testing.T) {
+	kp := mustGenKP(t)
+	v, _ := NewRSAVerifierFromPEM(kp.PublicPEM)
+
+	// Use an invalid hash algorithm value
+	err := v.Verify(bg, contracts.HashAlgorithm(999), []byte("data"), []byte("sig"))
+	if err == nil || !strings.Contains(err.Error(), "unsupported hash algorithm") {
+		t.Fatalf("expected unsupported hash algorithm error, got %v", err)
 	}
 }
 
