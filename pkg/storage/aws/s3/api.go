@@ -24,7 +24,32 @@ func WithEndpoint(endpoint string) Option { return internal.WithEndpoint(endpoin
 // WithClient configures a custom S3 client implementation.
 func WithClient(client ClientAPI) Option { return internal.WithClient(client) }
 
+// WithTransferManagerConcurrency sets the concurrency level for multipart operations.
+// Default: 1 (sequential). Higher values enable parallel uploads/downloads.
+// Recommended: 1 for Lambda (avoids memory overhead), 4-8 for servers.
+func WithTransferManagerConcurrency(concurrency int) Option {
+	return internal.WithTransferManagerConcurrency(concurrency)
+}
+
+// WithTransferManagerPartSize sets the size of each part in multipart uploads.
+// Default: 5MB. Must be >= 5MB for S3.
+func WithTransferManagerPartSize(bytes int64) Option {
+	return internal.WithTransferManagerPartSize(bytes)
+}
+
+// WithTransferManagerThreshold sets the size threshold for using multipart uploads.
+// Default: 10MB. Files smaller than this use single PutObject.
+func WithTransferManagerThreshold(bytes int64) Option {
+	return internal.WithTransferManagerThreshold(bytes)
+}
+
+// WithTransferManager injects a custom transfer manager (useful for testing).
+func WithTransferManager(tm internal.TransferManagerAPI) Option {
+	return internal.WithTransferManager(tm)
+}
+
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
+// Uses transfer manager by default with Concurrency=1 for optimal Lambda performance.
 // Complexity: O(1). Memory: ~1-2 KB for client + state. Callers should reuse across requests.
 func NewStorageAPI(opts ...Option) (storagecontracts.StorageAPI, error) {
 	return internal.NewStorageAPI(opts...)

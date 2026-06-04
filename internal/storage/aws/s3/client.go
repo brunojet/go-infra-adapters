@@ -1,31 +1,58 @@
 package s3
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/brunojet/go-infra-adapters/v4/pkg/storage/contracts"
 )
 
 type S3Client struct {
-	client S3API
-	mu     sync.Mutex
+	client          S3API
+	transferManager TransferManagerAPI
+	config          *adapterConfig
+	mu              sync.Mutex
 }
 
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
+// Transfer manager is always used for automatic retry and multipart support.
 func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 	cfg := newConfig(opts...)
 	client, err := newS3Client(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &S3Client{client: client}, nil
+
+	// Use injected transfer manager or initialize from S3 client
+	var transferMgr TransferManagerAPI
+	if cfg.transferManager != nil {
+		// Transfer manager was injected (e.g., for testing)
+		transferMgr = cfg.transferManager
+	} else {
+		// Initialize from S3 client (required, never nil)
+		s3client, ok := client.(*s3.Client)
+		if !ok {
+			return nil, errors.New("S3 client must be *s3.Client to initialize transfer manager")
+		}
+		transferMgr = initTransferManager(s3client, cfg)
+	}
+
+	// Store S3 API for HeadObject operations
+	if cfg.s3api == nil {
+		cfg.s3api = client
+	}
+
+	return &S3Client{
+		client:          client,
+		transferManager: transferMgr,
+		config:          cfg,
+	}, nil
 }
 
 func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
@@ -36,7 +63,17 @@ func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &bucketAdapter{client: client, bucket: name}, nil
+	s3api := client // Default to client if config not available
+	if c.config != nil && c.config.s3api != nil {
+		s3api = c.config.s3api
+	}
+
+	return &bucketAdapter{
+		client:          client,
+		bucket:          name,
+		transferManager: c.transferManager,
+		s3api:           s3api,
+	}, nil
 }
 
 func (c *S3Client) defaultClient() (S3API, error) {
@@ -55,8 +92,10 @@ func (c *S3Client) defaultClient() (S3API, error) {
 }
 
 type bucketAdapter struct {
-	client S3API
-	bucket string
+	client          S3API
+	bucket          string
+	transferManager TransferManagerAPI
+	s3api           S3API
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
@@ -65,31 +104,33 @@ func (b *bucketAdapter) GetObject(ctx context.Context, key string, obj *contract
 	if obj == nil {
 		return errors.New("nil object")
 	}
-	out, err := b.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &b.bucket, Key: &key})
+
+	// Transfer manager always used for automatic retry and streaming
+	getResult, err := b.transferManager.GetObject(ctx, &transfermanager.GetObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+	})
 	if err != nil {
 		return err
 	}
-	// Build metadata/info to return alongside the stream.
-	meta := map[string]string{}
-	if out.ETag != nil {
-		meta["etag"] = *out.ETag
-	}
-	var size int64
-	if out.ContentLength != nil {
-		size = *out.ContentLength
-	}
-	var contentType string
-	if out.ContentType != nil {
-		contentType = *out.ContentType
-	}
-	obj.Info = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
 
-	// If the provider returned a nil body, supply an empty reader.
-	if out.Body == nil {
-		obj.Body = io.NopCloser(bytes.NewReader(nil))
-	} else {
-		obj.Body = out.Body
+	meta := make(map[string]string)
+	if getResult.ETag != nil {
+		meta["etag"] = *getResult.ETag
 	}
+
+	var size int64
+	if getResult.ContentLength != nil {
+		size = *getResult.ContentLength
+	}
+
+	var contentType string
+	if getResult.ContentType != nil {
+		contentType = *getResult.ContentType
+	}
+
+	obj.Info = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
+	obj.Body = io.NopCloser(getResult.Body)
 	return nil
 }
 
@@ -101,9 +142,12 @@ func (b *bucketAdapter) PutObject(ctx context.Context, obj *contracts.BucketObje
 	if key == "" {
 		return errors.New("object key required")
 	}
-	input := &s3.PutObjectInput{Bucket: &b.bucket, Key: &key, Body: obj.Body}
-	if obj.Info.Size > 0 {
-		input.ContentLength = aws.Int64(obj.Info.Size)
+
+	// Transfer manager always used for multipart upload with automatic retry
+	input := &transfermanager.UploadObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+		Body:   obj.Body,
 	}
 	if obj.Info.ContentType != "" {
 		input.ContentType = aws.String(obj.Info.ContentType)
@@ -111,7 +155,9 @@ func (b *bucketAdapter) PutObject(ctx context.Context, obj *contracts.BucketObje
 	if obj.Info.Metadata != nil {
 		input.Metadata = obj.Info.Metadata
 	}
-	_, err := b.client.PutObject(ctx, input)
+
+	_, err := b.transferManager.UploadObject(ctx, input)
+
 	// Close the provided body if present to avoid leaking resources.
 	if obj.Body != nil {
 		_ = obj.Body.Close()
@@ -123,22 +169,53 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 	if objInfo == nil {
 		return errors.New("nil objectInfo")
 	}
-	out, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
+
+	// Use raw S3 API for HEAD operations
+	out, err := b.s3api.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
 	if err != nil {
 		return err
 	}
+
 	meta := map[string]string{}
 	if out.ETag != nil {
 		meta["etag"] = *out.ETag
 	}
+
 	var size int64
 	if out.ContentLength != nil {
 		size = *out.ContentLength
 	}
+
 	var contentType string
 	if out.ContentType != nil {
 		contentType = *out.ContentType
 	}
+
 	*objInfo = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
 	return nil
+}
+
+// initTransferManager initializes transfer manager with defaults optimized for Lambda
+func initTransferManager(s3client *s3.Client, cfg *adapterConfig) TransferManagerAPI {
+	// Set defaults: these are tuned for Lambda (low memory, sequential processing)
+	concurrency := 1                     // Lambda: sequential only
+	partSize := int64(5 * 1024 * 1024)   // 5MB per part
+	threshold := int64(10 * 1024 * 1024) // Use multipart for >10MB
+
+	// Allow overrides via config
+	if cfg.transferManagerConcurrency > 0 {
+		concurrency = cfg.transferManagerConcurrency
+	}
+	if cfg.transferManagerPartSize > 0 {
+		partSize = cfg.transferManagerPartSize
+	}
+	if cfg.transferManagerThreshold > 0 {
+		threshold = cfg.transferManagerThreshold
+	}
+
+	return transfermanager.New(s3client, func(opts *transfermanager.Options) {
+		opts.Concurrency = concurrency
+		opts.PartSizeBytes = partSize
+		opts.MultipartUploadThreshold = threshold
+	})
 }
