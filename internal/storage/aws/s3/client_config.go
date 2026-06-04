@@ -4,6 +4,7 @@ import (
 	"context"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -17,13 +18,13 @@ type S3API interface {
 }
 
 type adapterConfig struct {
-	client                     S3API //nolint:unused // reserved for injection in tests/extensions
+	client                     S3API                   //nolint:unused // reserved for injection in tests/extensions
+	transferManager            *transfermanager.Client //nolint:unused // reserved for injection in tests
 	region                     string
 	endpoint                   string
 	transferManagerConcurrency int
 	transferManagerPartSize    int64
 	transferManagerThreshold   int64
-	disableTransferManager     bool
 }
 
 func WithRegion(region string) Option {
@@ -42,6 +43,14 @@ func WithEndpoint(endpoint string) Option {
 func WithClient(client S3API) Option {
 	return func(cfg *adapterConfig) {
 		cfg.client = client
+	}
+}
+
+// WithTransferManager injects a custom transfer manager (useful for testing).
+// Internal use only - reserved for tests and mocks.
+func WithTransferManager(tm *transfermanager.Client) Option {
+	return func(cfg *adapterConfig) {
+		cfg.transferManager = tm
 	}
 }
 
@@ -73,14 +82,6 @@ func WithTransferManagerThreshold(bytes int64) Option {
 		if bytes > 0 {
 			cfg.transferManagerThreshold = bytes
 		}
-	}
-}
-
-// WithoutTransferManager disables transfer manager and uses raw S3 API.
-// Useful for small files or backward compatibility.
-func WithoutTransferManager() Option {
-	return func(cfg *adapterConfig) {
-		cfg.disableTransferManager = true
 	}
 }
 

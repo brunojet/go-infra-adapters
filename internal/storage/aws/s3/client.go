@@ -1,7 +1,6 @@
 package s3
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -22,6 +21,7 @@ type S3Client struct {
 }
 
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
+// Transfer manager is always used for automatic retry and multipart support.
 func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 	cfg := newConfig(opts...)
 	client, err := newS3Client(cfg)
@@ -29,9 +29,13 @@ func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 		return nil, err
 	}
 
-	// Initialize transfer manager with defaults
+	// Use injected transfer manager or initialize from S3 client
 	var transferMgr *transfermanager.Client
-	if !cfg.disableTransferManager {
+	if cfg.transferManager != nil {
+		// Transfer manager was injected (e.g., for testing)
+		transferMgr = cfg.transferManager
+	} else {
+		// Try to initialize from client
 		s3client, ok := client.(*s3.Client)
 		if ok {
 			transferMgr = initTransferManager(s3client, cfg)
@@ -54,10 +58,9 @@ func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 		return nil, err
 	}
 	return &bucketAdapter{
-		client:             client,
-		bucket:             name,
-		transferManager:    c.transferManager,
-		disableTransferMgr: c.config != nil && c.config.disableTransferManager,
+		client:          client,
+		bucket:          name,
+		transferManager: c.transferManager,
 	}, nil
 }
 
@@ -77,10 +80,9 @@ func (c *S3Client) defaultClient() (S3API, error) {
 }
 
 type bucketAdapter struct {
-	client             S3API
-	bucket             string
-	transferManager    *transfermanager.Client
-	disableTransferMgr bool
+	client          S3API
+	bucket          string
+	transferManager *transfermanager.Client
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
@@ -90,60 +92,32 @@ func (b *bucketAdapter) GetObject(ctx context.Context, key string, obj *contract
 		return errors.New("nil object")
 	}
 
-	var body io.ReadCloser
+	// Transfer manager always used for automatic retry and streaming
+	getResult, err := b.transferManager.GetObject(ctx, &transfermanager.GetObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return err
+	}
+
+	meta := make(map[string]string)
+	if getResult.ETag != nil {
+		meta["etag"] = *getResult.ETag
+	}
+
 	var size int64
+	if getResult.ContentLength != nil {
+		size = *getResult.ContentLength
+	}
+
 	var contentType string
-	var meta map[string]string
-
-	// Use transfer manager if available for better retry and streaming
-	if b.transferManager != nil && !b.disableTransferMgr {
-		getResult, err := b.transferManager.GetObject(ctx, &transfermanager.GetObjectInput{
-			Bucket: aws.String(b.bucket),
-			Key:    aws.String(key),
-		})
-		if err != nil {
-			return err
-		}
-
-		body = io.NopCloser(getResult.Body)
-		if getResult.ContentLength != nil {
-			size = *getResult.ContentLength
-		}
-		if getResult.ContentType != nil {
-			contentType = *getResult.ContentType
-		}
-		meta = make(map[string]string)
-		if getResult.ETag != nil {
-			meta["etag"] = *getResult.ETag
-		}
-	} else {
-		// Fallback to raw S3 API
-		out, err := b.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &b.bucket, Key: &key})
-		if err != nil {
-			return err
-		}
-
-		if out.Body == nil {
-			body = io.NopCloser(bytes.NewReader(nil))
-		} else {
-			body = out.Body
-		}
-
-		if out.ContentLength != nil {
-			size = *out.ContentLength
-		}
-		if out.ContentType != nil {
-			contentType = *out.ContentType
-		}
-
-		meta = map[string]string{}
-		if out.ETag != nil {
-			meta["etag"] = *out.ETag
-		}
+	if getResult.ContentType != nil {
+		contentType = *getResult.ContentType
 	}
 
 	obj.Info = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
-	obj.Body = body
+	obj.Body = io.NopCloser(getResult.Body)
 	return nil
 }
 
@@ -156,36 +130,20 @@ func (b *bucketAdapter) PutObject(ctx context.Context, obj *contracts.BucketObje
 		return errors.New("object key required")
 	}
 
-	var err error
-
-	// Use transfer manager if available for multipart upload with retry
-	if b.transferManager != nil && !b.disableTransferMgr {
-		input := &transfermanager.UploadObjectInput{
-			Bucket: aws.String(b.bucket),
-			Key:    aws.String(key),
-			Body:   obj.Body,
-		}
-		if obj.Info.ContentType != "" {
-			input.ContentType = aws.String(obj.Info.ContentType)
-		}
-		if obj.Info.Metadata != nil {
-			input.Metadata = obj.Info.Metadata
-		}
-		_, err = b.transferManager.UploadObject(ctx, input)
-	} else {
-		// Fallback to raw S3 API
-		input := &s3.PutObjectInput{Bucket: &b.bucket, Key: &key, Body: obj.Body}
-		if obj.Info.Size > 0 {
-			input.ContentLength = aws.Int64(obj.Info.Size)
-		}
-		if obj.Info.ContentType != "" {
-			input.ContentType = aws.String(obj.Info.ContentType)
-		}
-		if obj.Info.Metadata != nil {
-			input.Metadata = obj.Info.Metadata
-		}
-		_, err = b.client.PutObject(ctx, input)
+	// Transfer manager always used for multipart upload with automatic retry
+	input := &transfermanager.UploadObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+		Body:   obj.Body,
 	}
+	if obj.Info.ContentType != "" {
+		input.ContentType = aws.String(obj.Info.ContentType)
+	}
+	if obj.Info.Metadata != nil {
+		input.Metadata = obj.Info.Metadata
+	}
+
+	_, err := b.transferManager.UploadObject(ctx, input)
 
 	// Close the provided body if present to avoid leaking resources.
 	if obj.Body != nil {

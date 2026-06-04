@@ -43,10 +43,6 @@ func WithTransferManagerThreshold(bytes int64) Option {
 	return internal.WithTransferManagerThreshold(bytes)
 }
 
-// WithoutTransferManager disables transfer manager and uses raw S3 API.
-// Useful for small files or backward compatibility.
-func WithoutTransferManager() Option { return internal.WithoutTransferManager() }
-
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
 // Uses transfer manager by default with Concurrency=1 for optimal Lambda performance.
 // Complexity: O(1). Memory: ~1-2 KB for client + state. Callers should reuse across requests.
