@@ -17,11 +17,10 @@ type S3API interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
-// TransferManagerAPI mirrors the subset of transfermanager.Client methods + S3 HeadObject used by the adapter.
+// TransferManagerAPI mirrors the subset of transfermanager.Client methods used by the adapter.
 type TransferManagerAPI interface {
 	GetObject(ctx context.Context, input *transfermanager.GetObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.GetObjectOutput, error)
 	UploadObject(ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error)
-	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
 type adapterConfig struct {
@@ -32,6 +31,7 @@ type adapterConfig struct {
 	transferManagerConcurrency int
 	transferManagerPartSize    int64
 	transferManagerThreshold   int64
+	s3api                      S3API //nolint:unused // for HeadObject operations
 }
 
 func WithRegion(region string) Option {

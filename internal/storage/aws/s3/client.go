@@ -43,6 +43,11 @@ func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 		transferMgr = initTransferManager(s3client, cfg)
 	}
 
+	// Store S3 API for HeadObject operations
+	if cfg.s3api == nil {
+		cfg.s3api = client
+	}
+
 	return &S3Client{
 		client:          client,
 		transferManager: transferMgr,
@@ -58,10 +63,16 @@ func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
+	s3api := client // Default to client if config not available
+	if c.config != nil && c.config.s3api != nil {
+		s3api = c.config.s3api
+	}
+
 	return &bucketAdapter{
 		client:          client,
 		bucket:          name,
 		transferManager: c.transferManager,
+		s3api:           s3api,
 	}, nil
 }
 
@@ -84,6 +95,7 @@ type bucketAdapter struct {
 	client          S3API
 	bucket          string
 	transferManager TransferManagerAPI
+	s3api           S3API
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
@@ -158,8 +170,8 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 		return errors.New("nil objectInfo")
 	}
 
-	// Use transfer manager API which includes HeadObject via S3 client
-	out, err := b.transferManager.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
+	// Use raw S3 API for HEAD operations
+	out, err := b.s3api.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
 	if err != nil {
 		return err
 	}
@@ -183,24 +195,6 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 	return nil
 }
 
-// transferManagerWithHeadObject wraps transfer manager + S3 client to provide HeadObject
-type transferManagerWithHeadObject struct {
-	tm  *transfermanager.Client
-	s3c S3API
-}
-
-func (t *transferManagerWithHeadObject) GetObject(ctx context.Context, input *transfermanager.GetObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.GetObjectOutput, error) {
-	return t.tm.GetObject(ctx, input, opts...)
-}
-
-func (t *transferManagerWithHeadObject) UploadObject(ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error) {
-	return t.tm.UploadObject(ctx, input, opts...)
-}
-
-func (t *transferManagerWithHeadObject) HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
-	return t.s3c.HeadObject(ctx, params, optFns...)
-}
-
 // initTransferManager initializes transfer manager with defaults optimized for Lambda
 func initTransferManager(s3client *s3.Client, cfg *adapterConfig) TransferManagerAPI {
 	// Set defaults: these are tuned for Lambda (low memory, sequential processing)
@@ -219,11 +213,9 @@ func initTransferManager(s3client *s3.Client, cfg *adapterConfig) TransferManage
 		threshold = cfg.transferManagerThreshold
 	}
 
-	tm := transfermanager.New(s3client, func(opts *transfermanager.Options) {
+	return transfermanager.New(s3client, func(opts *transfermanager.Options) {
 		opts.Concurrency = concurrency
 		opts.PartSizeBytes = partSize
 		opts.MultipartUploadThreshold = threshold
 	})
-
-	return &transferManagerWithHeadObject{tm: tm, s3c: s3client}
 }
