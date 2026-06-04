@@ -8,7 +8,7 @@ import (
 	stdcrypto "crypto"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha1"      // nolint:gosec // G505: required for AWS CloudFront URL signing
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
@@ -161,7 +161,7 @@ func hashAlgoToCrypto(algo contracts.HashAlgorithm) (stdcrypto.Hash, func([]byte
 		}, nil
 	case contracts.SHA1:
 		return stdcrypto.SHA1, func(data []byte) []byte {
-			h := sha1.Sum(data)
+			h := sha1.Sum(data) // nolint:gosec // G401: required for AWS CloudFront URL signing
 			return h[:]
 		}, nil
 	case contracts.SHA512:

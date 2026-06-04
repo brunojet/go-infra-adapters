@@ -37,7 +37,7 @@ func NewCloudFrontSignerFromPEM(keyID string, privateKeyPEM []byte) (*CloudFront
 func (c *CloudFrontSigner) SignURL(ctx context.Context, resourceURL string, expiresAt int64) (string, error) {
 	// Canned Policy JSON format (exact AWS CloudFront specification)
 	policy := fmt.Sprintf(
-		`{"Statement":[{"Resource":"%s","Condition":{"DateLessThan":{"AWS:EpochTime":%d}}}]}`,
+		`{"Statement":[{"Resource":%q,"Condition":{"DateLessThan":{"AWS:EpochTime":%d}}}]}`,
 		resourceURL,
 		expiresAt,
 	)
