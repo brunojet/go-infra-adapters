@@ -17,6 +17,9 @@ type CdnAdapter interface {
 	// CreatePublicKey uploads the PEM-encoded public key and returns the newly created key's ID.
 	CreatePublicKey(ctx context.Context, key CdnKey) (keyID string, err error)
 
+	// DeletePublicKey removes a public key from the CDN provider by its ID.
+	DeletePublicKey(ctx context.Context, keyID string) error
+
 	// EnsureKeyGroup guarantees a KeyGroup named name exists and contains keyID.
 	// Creates the group when absent, updates it otherwise.
 	// Returns the KeyGroup ID.
