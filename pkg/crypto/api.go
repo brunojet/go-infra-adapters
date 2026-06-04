@@ -5,27 +5,45 @@
 package crypto
 
 import (
-	internal "github.com/brunojet/go-infra-adapters/v3/internal/crypto"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
+	"github.com/brunojet/go-infra-adapters/v4/internal/crypto"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
+
+// KeyGenerator is a re-export of contracts.KeyGenerator for convenience.
+type KeyGenerator = contracts.KeyGenerator
+
+// Signer is a re-export of contracts.Signer for convenience.
+type Signer = contracts.Signer
+
+// Verifier is a re-export of contracts.Verifier for convenience.
+type Verifier = contracts.Verifier
+
+// SHA1 is SHA-1 hashing algorithm (required for AWS CloudFront signing).
+const SHA1 = contracts.SHA1
+
+// SHA256 is SHA-256 hashing algorithm (default for general-purpose signing).
+const SHA256 = contracts.SHA256
+
+// SHA512 is SHA-512 hashing algorithm (high-security requirements).
+const SHA512 = contracts.SHA512
 
 // NewRSAKeyGenerator returns a KeyGenerator that produces RSA key pairs of the
 // given bit size (minimum 2048).
 // Complexity: O(1) for construction; O(n) per key generation where n = bits.
-func NewRSAKeyGenerator(bits int) contracts.KeyGenerator {
-	return internal.NewRSAKeyGenerator(bits)
+func NewRSAKeyGenerator(bits int) KeyGenerator {
+	return crypto.NewRSAKeyGenerator(bits)
 }
 
 // NewRSASignerFromPEM returns a Signer backed by the PEM-encoded RSA private key.
 // Accepts PKCS1 ("RSA PRIVATE KEY") and PKCS8 ("PRIVATE KEY") formats.
 // Complexity: O(n) where n = len(privateKeyPEM). Memory: ~1-5 KB for parsed key.
-func NewRSASignerFromPEM(privateKeyPEM []byte) (contracts.Signer, error) {
-	return internal.NewRSASignerFromPEM(privateKeyPEM)
+func NewRSASignerFromPEM(privateKeyPEM []byte) (Signer, error) {
+	return crypto.NewRSASignerFromPEM(privateKeyPEM)
 }
 
 // NewRSAVerifierFromPEM returns a Verifier backed by the PEM-encoded RSA public key
 // in PKIX ("PUBLIC KEY") format.
 // Complexity: O(n) where n = len(publicKeyPEM). Memory: ~500 bytes for parsed key.
-func NewRSAVerifierFromPEM(publicKeyPEM []byte) (contracts.Verifier, error) {
-	return internal.NewRSAVerifierFromPEM(publicKeyPEM)
+func NewRSAVerifierFromPEM(publicKeyPEM []byte) (Verifier, error) {
+	return crypto.NewRSAVerifierFromPEM(publicKeyPEM)
 }

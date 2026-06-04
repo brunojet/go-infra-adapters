@@ -1,4 +1,4 @@
-module github.com/brunojet/go-infra-adapters/v3
+module github.com/brunojet/go-infra-adapters/v4
 
 go 1.26.3
 

@@ -32,3 +32,13 @@ type CdnAdapter interface {
 	// HealthCheck verifies connectivity to the CDN provider.
 	HealthCheck(ctx context.Context) error
 }
+
+// URLSigner signs resource URLs for content delivery networks.
+// Implementations handle signature format and encoding internally.
+type URLSigner interface {
+	// SignURL generates a signed URL for accessing the resource.
+	// resourceURL is the full URL to the resource (e.g., https://cdn.example.com/video.mp4).
+	// expiresAt is Unix timestamp when the signature expires.
+	// Returns the signed URL with authentication parameters.
+	SignURL(ctx context.Context, resourceURL string, expiresAt int64) (signedURL string, err error)
+}

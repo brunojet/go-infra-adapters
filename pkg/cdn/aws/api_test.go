@@ -6,8 +6,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	mockcf "github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws/mock"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	mockcf "github.com/brunojet/go-infra-adapters/v4/internal/cdn/aws/mock"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
 )
 
 func TestWithClient_NotNil(t *testing.T) {

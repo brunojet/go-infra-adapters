@@ -5,9 +5,9 @@ package aws
 import (
 	"log/slog"
 
-	internalaws "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/secret/contracts"
+	internalaws "github.com/brunojet/go-infra-adapters/v4/internal/secret/aws"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/secret/contracts"
 )
 
 // Option configures a secret client. Use With* functions to create options.
