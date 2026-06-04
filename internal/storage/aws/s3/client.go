@@ -157,28 +157,52 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 	if objInfo == nil {
 		return errors.New("nil objectInfo")
 	}
-	out, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
+
+	// Use transfer manager API which includes HeadObject via S3 client
+	out, err := b.transferManager.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &b.bucket, Key: &key})
 	if err != nil {
 		return err
 	}
+
 	meta := map[string]string{}
 	if out.ETag != nil {
 		meta["etag"] = *out.ETag
 	}
+
 	var size int64
 	if out.ContentLength != nil {
 		size = *out.ContentLength
 	}
+
 	var contentType string
 	if out.ContentType != nil {
 		contentType = *out.ContentType
 	}
+
 	*objInfo = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
 	return nil
 }
 
+// transferManagerWithHeadObject wraps transfer manager + S3 client to provide HeadObject
+type transferManagerWithHeadObject struct {
+	tm  *transfermanager.Client
+	s3c S3API
+}
+
+func (t *transferManagerWithHeadObject) GetObject(ctx context.Context, input *transfermanager.GetObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.GetObjectOutput, error) {
+	return t.tm.GetObject(ctx, input, opts...)
+}
+
+func (t *transferManagerWithHeadObject) UploadObject(ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error) {
+	return t.tm.UploadObject(ctx, input, opts...)
+}
+
+func (t *transferManagerWithHeadObject) HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	return t.s3c.HeadObject(ctx, params, optFns...)
+}
+
 // initTransferManager initializes transfer manager with defaults optimized for Lambda
-func initTransferManager(s3client *s3.Client, cfg *adapterConfig) *transfermanager.Client {
+func initTransferManager(s3client *s3.Client, cfg *adapterConfig) TransferManagerAPI {
 	// Set defaults: these are tuned for Lambda (low memory, sequential processing)
 	concurrency := 1                     // Lambda: sequential only
 	partSize := int64(5 * 1024 * 1024)   // 5MB per part
@@ -195,9 +219,11 @@ func initTransferManager(s3client *s3.Client, cfg *adapterConfig) *transfermanag
 		threshold = cfg.transferManagerThreshold
 	}
 
-	return transfermanager.New(s3client, func(opts *transfermanager.Options) {
+	tm := transfermanager.New(s3client, func(opts *transfermanager.Options) {
 		opts.Concurrency = concurrency
 		opts.PartSizeBytes = partSize
 		opts.MultipartUploadThreshold = threshold
 	})
+
+	return &transferManagerWithHeadObject{tm: tm, s3c: s3client}
 }

@@ -59,6 +59,10 @@ func (m *mockTransferManager) UploadObject(ctx context.Context, input *transferm
 	}, nil
 }
 
+func (m *mockTransferManager) HeadObject(ctx context.Context, params *s3sdk.HeadObjectInput, optFns ...func(*s3sdk.Options)) (*s3sdk.HeadObjectOutput, error) {
+	return m.s3api.HeadObject(ctx, params, optFns...)
+}
+
 func injectS3LoadError(t *testing.T) func() {
 	t.Helper()
 	orig := s3AwsLoadDefaultConfig
