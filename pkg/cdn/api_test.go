@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brunojet/go-infra-adapters/v4/pkg/cdn/contracts"
 	cryptopkg "github.com/brunojet/go-infra-adapters/v4/pkg/crypto"
 )
 
@@ -23,9 +22,6 @@ func TestNewCloudFrontSignerFromPEM_Success(t *testing.T) {
 	if signer == nil {
 		t.Fatal("signer is nil")
 	}
-
-	// Verify it implements URLSigner interface
-	_ = signer.(contracts.URLSigner)
 }
 
 func TestNewCloudFrontSignerFromPEM_InvalidKey(t *testing.T) {

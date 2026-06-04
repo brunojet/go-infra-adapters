@@ -8,14 +8,15 @@ import (
 	stdcrypto "crypto"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"      // nolint:gosec // G505: required for AWS CloudFront URL signing
+
+	//nolint:gosec // G505: required for AWS CloudFront URL signing
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-	"io"
 
 	"context"
 
@@ -24,7 +25,7 @@ import (
 
 // cryptoRandReader is the random source used by Generate and Sign.
 // Swapped in tests to trigger error-path coverage.
-var cryptoRandReader io.Reader = cryptorand.Reader
+var cryptoRandReader = cryptorand.Reader
 
 // rsaSignPKCS1v15 wraps rsa.SignPKCS1v15; replaceable in tests to force errors.
 var rsaSignPKCS1v15 = rsa.SignPKCS1v15
