@@ -3,6 +3,8 @@ package crypto
 import (
 	"context"
 	"testing"
+
+	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
 
 var bg = context.Background()
@@ -85,12 +87,12 @@ func TestRSA_SignAndVerify(t *testing.T) {
 	verifier, _ := NewRSAVerifierFromPEM(kp.PublicPEM)
 
 	payload := []byte("test message")
-	sig, err := signer.Sign(bg, payload)
+	sig, err := signer.Sign(bg, contracts.SHA256, payload)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
 
-	if err := verifier.Verify(bg, payload, sig); err != nil {
+	if err := verifier.Verify(bg, contracts.SHA256, payload, sig); err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
 }
