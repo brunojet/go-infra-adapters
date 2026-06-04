@@ -1,5 +1,31 @@
 # Changelog
 
+## [4.0.0](https://github.com/brunojet/go-infra-adapters/compare/v3.3.0...v4.0.0) (2026-06-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Sign and Verify interfaces now require hashAlgo parameter. Callers must update from:   signer.Sign(ctx, payload)
+
+### Features
+
+* Add parametrizable hash algorithm support and CloudFront URL signing ([b3a1671](https://github.com/brunojet/go-infra-adapters/commit/b3a1671fa5b17ade07b54a970ca3df2f28059dcf))
+
+
+### Bug Fixes
+
+* Add documentation comments for exported types and constants ([f0da383](https://github.com/brunojet/go-infra-adapters/commit/f0da383ec77b71aba777fce81378eda0a1a10ba0))
+* Add linter directives for test credentials ([d00b643](https://github.com/brunojet/go-infra-adapters/commit/d00b6435b4b2c9488d7a5b0a29bc7c72d220192c))
+* Resolve golangci-lint issues ([21486fb](https://github.com/brunojet/go-infra-adapters/commit/21486fb3cab6c9c572a5b05a7c41620e48046686))
+* Resolve remaining golangci-lint issues ([6c13c02](https://github.com/brunojet/go-infra-adapters/commit/6c13c02fc034e9a3cef767e3dd2f8862d0368f16))
+* Update crypto API type aliases and test mocks for v4 ([d5a775b](https://github.com/brunojet/go-infra-adapters/commit/d5a775bce0b330a9a38c2aa6af3b0467ac2a78c2))
+
+
+### Documentation
+
+* CloudFront Signed URL implementation proposal ([5e0f063](https://github.com/brunojet/go-infra-adapters/commit/5e0f06351e090dc784e184ead7fb8c70808a7aea))
+* Update CloudFront proposal with current code structure ([233d2b9](https://github.com/brunojet/go-infra-adapters/commit/233d2b9bb4be5534edda9298e8e654ce01b8346d))
+
 ## [3.3.0](https://github.com/brunojet/go-infra-adapters/compare/v3.2.1...v3.3.0) (2026-06-04)
 
 
