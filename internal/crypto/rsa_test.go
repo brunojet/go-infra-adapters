@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
 
 var bg = context.Background()

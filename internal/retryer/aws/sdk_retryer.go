@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/smithy-go/logging"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
 )
 
 // SDKRetryer adapts retry.Strategy to AWS SDK v2's retry.Retryer interface.

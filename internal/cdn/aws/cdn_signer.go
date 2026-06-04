@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	cryptointernal "github.com/brunojet/go-infra-adapters/v3/internal/crypto"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
+	cryptointernal "github.com/brunojet/go-infra-adapters/v4/internal/crypto"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
 
 // CloudFrontSigner signs CloudFront URLs using AWS Canned Policy format.

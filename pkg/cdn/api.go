@@ -4,8 +4,8 @@
 package cdn
 
 import (
-	internal "github.com/brunojet/go-infra-adapters/v3/internal/cdn/aws"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
+	internal "github.com/brunojet/go-infra-adapters/v4/internal/cdn/aws"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/cdn/contracts"
 )
 
 // NewCloudFrontSignerFromPEM returns a URLSigner for AWS CloudFront signed URLs.

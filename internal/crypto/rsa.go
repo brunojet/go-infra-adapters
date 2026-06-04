@@ -19,7 +19,7 @@ import (
 
 	"context"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
 )
 
 // cryptoRandReader is the random source used by Generate and Sign.
