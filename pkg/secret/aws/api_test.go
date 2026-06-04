@@ -6,8 +6,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	mocksm "github.com/brunojet/go-infra-adapters/v3/internal/secret/aws/mock"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	mocksm "github.com/brunojet/go-infra-adapters/v4/internal/secret/aws/mock"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
 )
 
 func TestOptionsWrappers_NotNil(t *testing.T) {

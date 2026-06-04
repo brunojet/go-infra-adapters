@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
 )
 
 func TestSDKRetryer(t *testing.T) {

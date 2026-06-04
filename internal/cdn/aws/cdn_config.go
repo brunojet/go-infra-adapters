@@ -8,8 +8,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 
-	awsretryer "github.com/brunojet/go-infra-adapters/v3/internal/retryer/aws"
-	"github.com/brunojet/go-infra-adapters/v3/pkg/retry"
+	awsretryer "github.com/brunojet/go-infra-adapters/v4/internal/retryer/aws"
+	"github.com/brunojet/go-infra-adapters/v4/pkg/retry"
 )
 
 // CloudFrontClient abstracts the CloudFront SDK operations.

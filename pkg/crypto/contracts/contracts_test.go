@@ -43,12 +43,12 @@ func (m mockKeyGenerator) Generate(context.Context) (*KeyPair, error) {
 
 type mockSigner struct{}
 
-func (m mockSigner) Sign(context.Context, []byte) ([]byte, error) {
+func (m mockSigner) Sign(context.Context, HashAlgorithm, []byte) ([]byte, error) {
 	return nil, nil
 }
 
 type mockVerifier struct{}
 
-func (m mockVerifier) Verify(context.Context, []byte, []byte) error {
+func (m mockVerifier) Verify(context.Context, HashAlgorithm, []byte, []byte) error {
 	return nil
 }

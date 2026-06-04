@@ -4,7 +4,7 @@ package retry
 import (
 	"time"
 
-	"github.com/brunojet/go-infra-adapters/v3/internal/retry"
+	"github.com/brunojet/go-infra-adapters/v4/internal/retry"
 )
 
 // Strategy defines how to retry failed operations.
