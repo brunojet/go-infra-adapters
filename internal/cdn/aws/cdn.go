@@ -53,6 +53,11 @@ func (d *cdnAdapter) CreatePublicKey(ctx context.Context, key contracts.CdnKey) 
 	return id, nil
 }
 
+// DeletePublicKey removes a public key from CloudFront by its ID.
+func (d *cdnAdapter) DeletePublicKey(ctx context.Context, keyID string) error {
+	return d.deletePublicKey(ctx, keyID)
+}
+
 // EnsureKeyGroup guarantees a KeyGroup named name exists and contains keyID.
 // Creates the group when absent, updates it otherwise. Returns the KeyGroup ID.
 func (d *cdnAdapter) EnsureKeyGroup(ctx context.Context, name, keyID string) (string, error) {

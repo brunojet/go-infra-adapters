@@ -50,6 +50,20 @@ func (mr *MockCdnAdapterMockRecorder) CreatePublicKey(ctx, key interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePublicKey", reflect.TypeOf((*MockCdnAdapter)(nil).CreatePublicKey), ctx, key)
 }
 
+// DeletePublicKey mocks base method.
+func (m *MockCdnAdapter) DeletePublicKey(ctx context.Context, keyID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePublicKey", ctx, keyID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePublicKey indicates an expected call of DeletePublicKey.
+func (mr *MockCdnAdapterMockRecorder) DeletePublicKey(ctx, keyID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePublicKey", reflect.TypeOf((*MockCdnAdapter)(nil).DeletePublicKey), ctx, keyID)
+}
+
 // EnsureKeyGroup mocks base method.
 func (m *MockCdnAdapter) EnsureKeyGroup(ctx context.Context, name, keyID string) (string, error) {
 	m.ctrl.T.Helper()
