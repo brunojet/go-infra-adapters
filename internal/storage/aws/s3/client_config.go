@@ -17,9 +17,13 @@ type S3API interface {
 }
 
 type adapterConfig struct {
-	client   S3API //nolint:unused // reserved for injection in tests/extensions
-	region   string
-	endpoint string
+	client                      S3API                              //nolint:unused // reserved for injection in tests/extensions
+	region                      string
+	endpoint                    string
+	transferManagerConcurrency  int
+	transferManagerPartSize     int64
+	transferManagerThreshold    int64
+	disableTransferManager      bool
 }
 
 func WithRegion(region string) Option {
@@ -38,6 +42,45 @@ func WithEndpoint(endpoint string) Option {
 func WithClient(client S3API) Option {
 	return func(cfg *adapterConfig) {
 		cfg.client = client
+	}
+}
+
+// WithTransferManagerConcurrency sets the concurrency level for multipart operations.
+// Default: 1 (sequential). Higher values enable parallel uploads/downloads.
+// Recommended: 1 for Lambda (avoids memory overhead), 4-8 for servers.
+func WithTransferManagerConcurrency(concurrency int) Option {
+	return func(cfg *adapterConfig) {
+		if concurrency > 0 {
+			cfg.transferManagerConcurrency = concurrency
+		}
+	}
+}
+
+// WithTransferManagerPartSize sets the size of each part in multipart uploads.
+// Default: 5MB. Must be >= 5MB for S3.
+func WithTransferManagerPartSize(bytes int64) Option {
+	return func(cfg *adapterConfig) {
+		if bytes >= 5*1024*1024 { // 5MB minimum
+			cfg.transferManagerPartSize = bytes
+		}
+	}
+}
+
+// WithTransferManagerThreshold sets the size threshold for using multipart uploads.
+// Default: 10MB. Files smaller than this use single PutObject.
+func WithTransferManagerThreshold(bytes int64) Option {
+	return func(cfg *adapterConfig) {
+		if bytes > 0 {
+			cfg.transferManagerThreshold = bytes
+		}
+	}
+}
+
+// WithoutTransferManager disables transfer manager and uses raw S3 API.
+// Useful for small files or backward compatibility.
+func WithoutTransferManager() Option {
+	return func(cfg *adapterConfig) {
+		cfg.disableTransferManager = true
 	}
 }
 
