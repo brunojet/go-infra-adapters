@@ -17,9 +17,15 @@ type S3API interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
+// TransferManagerAPI mirrors the subset of transfermanager.Client methods used by the adapter.
+type TransferManagerAPI interface {
+	GetObject(ctx context.Context, input *transfermanager.GetObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.GetObjectOutput, error)
+	UploadObject(ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error)
+}
+
 type adapterConfig struct {
-	client                     S3API                   //nolint:unused // reserved for injection in tests/extensions
-	transferManager            *transfermanager.Client //nolint:unused // reserved for injection in tests
+	client                     S3API              //nolint:unused // reserved for injection in tests/extensions
+	transferManager            TransferManagerAPI //nolint:unused // reserved for injection in tests
 	region                     string
 	endpoint                   string
 	transferManagerConcurrency int
@@ -48,7 +54,7 @@ func WithClient(client S3API) Option {
 
 // WithTransferManager injects a custom transfer manager (useful for testing).
 // Internal use only - reserved for tests and mocks.
-func WithTransferManager(tm *transfermanager.Client) Option {
+func WithTransferManager(tm TransferManagerAPI) Option {
 	return func(cfg *adapterConfig) {
 		cfg.transferManager = tm
 	}

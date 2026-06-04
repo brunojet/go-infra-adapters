@@ -9,6 +9,7 @@ import (
 
 	goaws "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	s3sdk "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,47 @@ import (
 	"github.com/brunojet/go-infra-adapters/v4/internal/storage/aws/s3/mock"
 	"github.com/brunojet/go-infra-adapters/v4/pkg/storage/contracts"
 )
+
+// mockTransferManager is a simple mock for testing that delegates to S3 API calls
+type mockTransferManager struct {
+	s3api S3API
+}
+
+func (m *mockTransferManager) GetObject(ctx context.Context, input *transfermanager.GetObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.GetObjectOutput, error) {
+	out, err := m.s3api.GetObject(ctx, &s3sdk.GetObjectInput{
+		Bucket: input.Bucket,
+		Key:    input.Key,
+	})
+	if err != nil {
+		return nil, err
+	}
+	body := out.Body
+	if body == nil {
+		body = io.NopCloser(bytes.NewReader(nil))
+	}
+	return &transfermanager.GetObjectOutput{
+		Body:          body,
+		ContentLength: out.ContentLength,
+		ContentType:   out.ContentType,
+		ETag:          out.ETag,
+	}, nil
+}
+
+func (m *mockTransferManager) UploadObject(ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error) {
+	_, err := m.s3api.PutObject(ctx, &s3sdk.PutObjectInput{
+		Bucket:      input.Bucket,
+		Key:         input.Key,
+		Body:        input.Body,
+		ContentType: input.ContentType,
+		Metadata:    input.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &transfermanager.UploadObjectOutput{
+		Location: input.Key,
+	}, nil
+}
 
 func injectS3LoadError(t *testing.T) func() {
 	t.Helper()
@@ -87,7 +129,8 @@ func TestBucketAdapter_PutGetHead(t *testing.T) {
 		ETag: goaws.String("\"etag\""),
 	}, nil)
 
-	sc, err := NewStorageAPI(WithClient(mockClient))
+	mockTM := &mockTransferManager{s3api: mockClient}
+	sc, err := NewStorageAPI(WithClient(mockClient), WithTransferManager(mockTM))
 	if err != nil {
 		t.Fatalf("NewStorageAPI failed: %v", err)
 	}
@@ -151,7 +194,7 @@ func TestGetObject_EdgeCases_NoETagNoLength(t *testing.T) {
 	payload := []byte("abc")
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(payload))}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	if err := b.GetObject(context.Background(), "k", gotObj); err != nil {
 		t.Fatalf("GetObject failed: %v", err)
@@ -169,7 +212,7 @@ func TestPutObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(nil, errors.New("puterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.PutObject(context.Background(), &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: io.NopCloser(bytes.NewReader([]byte("d")))}); err == nil {
 		t.Fatalf("expected error from PutObject")
 	}
@@ -182,7 +225,7 @@ func TestHeadObject_NoETag(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(&s3sdk.HeadObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	var info contracts.ObjectInfo
 	if err := b.HeadObject(context.Background(), "k", &info); err != nil {
 		t.Fatalf("HeadObject failed: %v", err)
@@ -226,7 +269,7 @@ func TestGetHeadPut_MetadataAndFields(t *testing.T) {
 	body := io.NopCloser(bytes.NewReader([]byte("payload")))
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{ETag: &etag, ContentLength: &cl, ContentType: &ct, Body: body}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	require.NoError(t, b.GetObject(context.Background(), "k", gotObj))
 	require.Equal(t, "k", gotObj.Info.Key)
@@ -252,7 +295,7 @@ func TestGetHeadPut_MetadataAndFields(t *testing.T) {
 	defer ctrl2.Finish()
 	m2 := mock.NewMockS3API(ctrl2)
 	m2.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(&s3sdk.PutObjectOutput{}, nil)
-	b2 := &bucketAdapter{client: m2, bucket: "b"}
+	b2 := &bucketAdapter{client: m2, bucket: "b", transferManager: &mockTransferManager{s3api: m2}}
 	tr := &trackingReadCloser{r: bytes.NewReader([]byte("x"))}
 	obj := &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k", Size: 10, ContentType: "text/plain", Metadata: map[string]string{"k": "v"}}, Body: tr}
 	require.NoError(t, b2.PutObject(context.Background(), obj))
@@ -279,7 +322,7 @@ func TestPutObject_NilAndEmptyKey(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.PutObject(context.Background(), nil); err == nil {
 		t.Fatalf("expected error for nil object")
 	}
@@ -296,7 +339,7 @@ func TestPutObject_ClosesBody(t *testing.T) {
 	// Expect PutObject called once
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(&s3sdk.PutObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	tr := &trackingReadCloser{r: bytes.NewReader([]byte("x"))}
 	obj := &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: tr}
 	require.NoError(t, b.PutObject(context.Background(), obj))
@@ -311,7 +354,7 @@ func TestGetObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(nil, errors.New("geterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.GetObject(context.Background(), "k", &contracts.BucketObject{}); err == nil {
 		t.Fatalf("expected error from GetObject")
 	}
@@ -323,7 +366,7 @@ func TestHeadObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(nil, errors.New("headerr"))
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	var info contracts.ObjectInfo
 	if err := b.HeadObject(context.Background(), "k", &info); err == nil {
 		t.Fatalf("expected error from HeadObject")
@@ -337,7 +380,7 @@ func TestGetObject_NilBody(t *testing.T) {
 	// Return output with nil Body
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{ETag: nil, ContentLength: nil, Body: nil}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	require.NoError(t, b.GetObject(context.Background(), "k", gotObj))
 	// Body should not be nil (should be NopCloser)
@@ -360,7 +403,7 @@ func TestPutObject_PropagatesClientError_Addition(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(nil, errors.New("puterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b"}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.PutObject(context.Background(), &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: io.NopCloser(bytes.NewReader([]byte("d")))})
 	if err == nil {
 		t.Fatalf("expected error from PutObject")

@@ -15,7 +15,7 @@ import (
 
 type S3Client struct {
 	client          S3API
-	transferManager *transfermanager.Client
+	transferManager TransferManagerAPI
 	config          *adapterConfig
 	mu              sync.Mutex
 }
@@ -30,16 +30,17 @@ func NewStorageAPI(opts ...Option) (contracts.StorageAPI, error) {
 	}
 
 	// Use injected transfer manager or initialize from S3 client
-	var transferMgr *transfermanager.Client
+	var transferMgr TransferManagerAPI
 	if cfg.transferManager != nil {
 		// Transfer manager was injected (e.g., for testing)
 		transferMgr = cfg.transferManager
 	} else {
-		// Try to initialize from client
+		// Initialize from S3 client (required, never nil)
 		s3client, ok := client.(*s3.Client)
-		if ok {
-			transferMgr = initTransferManager(s3client, cfg)
+		if !ok {
+			return nil, errors.New("S3 client must be *s3.Client to initialize transfer manager")
 		}
+		transferMgr = initTransferManager(s3client, cfg)
 	}
 
 	return &S3Client{
@@ -82,7 +83,7 @@ func (c *S3Client) defaultClient() (S3API, error) {
 type bucketAdapter struct {
 	client          S3API
 	bucket          string
-	transferManager *transfermanager.Client
+	transferManager TransferManagerAPI
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
