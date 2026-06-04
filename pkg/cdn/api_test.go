@@ -7,7 +7,9 @@ import (
 	"github.com/brunojet/go-infra-adapters/v4/pkg/cdn/contracts"
 )
 
-// testPrivateKeyPEM is a valid RSA private key for testing.
+// testPrivateKeyPEM is a valid RSA private key for testing only.
+// It is safe to hardcode in tests and should never be used in production.
+// nolint:gosec // G101: hardcoded credentials are acceptable in test files
 const testPrivateKeyPEM = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCqn+Pd40KItr+D
 WljXXqHs+VsoD1ccpWsXLMEfY7l/nDq/exhUfsh9jM+AH/bCSW0GCS1NibpjLv1t
