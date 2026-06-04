@@ -43,6 +43,11 @@ func WithTransferManagerThreshold(bytes int64) Option {
 	return internal.WithTransferManagerThreshold(bytes)
 }
 
+// WithTransferManager injects a custom transfer manager (useful for testing).
+func WithTransferManager(tm internal.TransferManagerAPI) Option {
+	return internal.WithTransferManager(tm)
+}
+
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
 // Uses transfer manager by default with Concurrency=1 for optimal Lambda performance.
 // Complexity: O(1). Memory: ~1-2 KB for client + state. Callers should reuse across requests.
