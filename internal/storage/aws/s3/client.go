@@ -15,10 +15,10 @@ import (
 )
 
 type S3Client struct {
-	client             S3API
-	transferManager    *transfermanager.Client
-	config             *adapterConfig
-	mu                 sync.Mutex
+	client          S3API
+	transferManager *transfermanager.Client
+	config          *adapterConfig
+	mu              sync.Mutex
 }
 
 // NewStorageAPI constructs an S3-backed StorageAPI using the provided options.
@@ -54,9 +54,9 @@ func (c *S3Client) NewBucket(name string) (contracts.BucketAdapter, error) {
 		return nil, err
 	}
 	return &bucketAdapter{
-		client:           client,
-		bucket:           name,
-		transferManager:  c.transferManager,
+		client:             client,
+		bucket:             name,
+		transferManager:    c.transferManager,
 		disableTransferMgr: c.config != nil && c.config.disableTransferManager,
 	}, nil
 }
@@ -77,10 +77,10 @@ func (c *S3Client) defaultClient() (S3API, error) {
 }
 
 type bucketAdapter struct {
-	client              S3API
-	bucket              string
-	transferManager     *transfermanager.Client
-	disableTransferMgr  bool
+	client             S3API
+	bucket             string
+	transferManager    *transfermanager.Client
+	disableTransferMgr bool
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
@@ -221,9 +221,9 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 // initTransferManager initializes transfer manager with defaults optimized for Lambda
 func initTransferManager(s3client *s3.Client, cfg *adapterConfig) *transfermanager.Client {
 	// Set defaults: these are tuned for Lambda (low memory, sequential processing)
-	concurrency := 1                       // Lambda: sequential only
-	partSize := int64(5 * 1024 * 1024)    // 5MB per part
-	threshold := int64(10 * 1024 * 1024)  // Use multipart for >10MB
+	concurrency := 1                     // Lambda: sequential only
+	partSize := int64(5 * 1024 * 1024)   // 5MB per part
+	threshold := int64(10 * 1024 * 1024) // Use multipart for >10MB
 
 	// Allow overrides via config
 	if cfg.transferManagerConcurrency > 0 {

@@ -17,13 +17,13 @@ type S3API interface {
 }
 
 type adapterConfig struct {
-	client                      S3API                              //nolint:unused // reserved for injection in tests/extensions
-	region                      string
-	endpoint                    string
-	transferManagerConcurrency  int
-	transferManagerPartSize     int64
-	transferManagerThreshold    int64
-	disableTransferManager      bool
+	client                     S3API //nolint:unused // reserved for injection in tests/extensions
+	region                     string
+	endpoint                   string
+	transferManagerConcurrency int
+	transferManagerPartSize    int64
+	transferManagerThreshold   int64
+	disableTransferManager     bool
 }
 
 func WithRegion(region string) Option {
