@@ -464,7 +464,6 @@ func TestGetLock_PropagatesError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to acquire lock")
 }
 
-
 func TestGetLockWait_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -534,7 +533,7 @@ func TestGetLockWait_ContextCancelledDuringBackoff(t *testing.T) {
 		},
 	}, nil).MinTimes(1)
 
-	// No DeleteObject expected—context cancelled during backoff (no lock acquired yet)
+	// No DeleteObject expected—context canceled during backoff (no lock acquired yet)
 	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Times(0)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
@@ -587,9 +586,9 @@ type mockAPIError struct {
 	code string
 }
 
-func (m *mockAPIError) Error() string              { return m.code }
-func (m *mockAPIError) ErrorCode() string         { return m.code }
-func (m *mockAPIError) ErrorMessage() string      { return m.code }
+func (m *mockAPIError) Error() string                 { return m.code }
+func (m *mockAPIError) ErrorCode() string             { return m.code }
+func (m *mockAPIError) ErrorMessage() string          { return m.code }
 func (m *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
 func newMockPreconditionFailedError() smithy.APIError {

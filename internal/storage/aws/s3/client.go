@@ -105,7 +105,6 @@ type bucketAdapter struct {
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
 
-
 // deleteObjectSafe deletes an object, ignoring NoSuchKey errors (idempotent).
 // If eTag is provided, uses conditional delete (IfMatch) for atomicity.
 func (b *bucketAdapter) deleteObjectSafe(ctx context.Context, key, eTag string) error {
@@ -280,7 +279,7 @@ func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Du
 		return err
 	}
 	// Lock acquired. Caller MUST call ReleaseLock() via defer() to clean up.
-	// If context is cancelled, caller's defer chain executes before return.
+	// If context is canceled, caller's defer chain executes before return.
 	return nil
 }
 
@@ -325,11 +324,11 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 		case <-time.After(backoff):
 			// Continue loop
 		case <-ctx.Done():
-			// Context cancelled during backoff. No lock acquired yet, so nothing to clean up.
+			// Context canceled during backoff. No lock acquired yet, so nothing to clean up.
 			return ctx.Err()
 		}
 
-		backoff = backoff * 2
+		backoff *= 2
 		if backoff > maxBackoff {
 			backoff = maxBackoff
 		}
