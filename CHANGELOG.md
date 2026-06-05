@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.1.0](https://github.com/brunojet/go-infra-adapters/compare/v4.0.0...v4.1.0) (2026-06-05)
+
+
+### Features
+
+* Document S3 adapter transfer manager configuration ([374c4f2](https://github.com/brunojet/go-infra-adapters/commit/374c4f29b0ee05659c1bb777a1a383655fa740c5))
+
+
+### Documentation
+
+* Document S3 adapter transfer manager configuration ([c6de9a0](https://github.com/brunojet/go-infra-adapters/commit/c6de9a0d20456e8fd40deb067869d161b8a18bcc))
+
 ## [4.0.0](https://github.com/brunojet/go-infra-adapters/compare/v3.3.0...v4.0.0) (2026-06-04)
 
 
