@@ -1,14 +1,19 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 
 	"github.com/brunojet/go-infra-adapters/v4/pkg/storage/contracts"
 )
@@ -99,6 +104,30 @@ type bucketAdapter struct {
 }
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
+
+// deleteObjectSafe deletes an object, ignoring NoSuchKey errors (idempotent).
+// If eTag is provided, uses conditional delete (IfMatch) for atomicity.
+func (b *bucketAdapter) deleteObjectSafe(ctx context.Context, key, eTag string) error {
+	input := &s3.DeleteObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+	}
+
+	if eTag != "" {
+		input.IfMatch = aws.String(eTag)
+	}
+
+	_, err := b.s3api.DeleteObject(ctx, input)
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
+			return nil // Object not found is OK (idempotent)
+		}
+		return fmt.Errorf("failed to delete object: %w", err)
+	}
+
+	return nil
+}
 
 func (b *bucketAdapter) GetObject(ctx context.Context, key string, obj *contracts.BucketObject) error {
 	if obj == nil {
@@ -193,6 +222,129 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 
 	*objInfo = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
 	return nil
+}
+
+// lockExistsError indicates that a lock already exists for a key.
+type lockExistsError struct {
+	key string
+}
+
+func (e *lockExistsError) Error() string {
+	return fmt.Sprintf("lock already exists for key %s", e.key)
+}
+
+// acquireLock attempts to create a lock and returns the ETag if successful.
+// Used internally to track lock identity for consistent conditional deletes.
+// Returns empty ETag and lockExistsError if lock already exists.
+func (b *bucketAdapter) acquireLock(ctx context.Context, lockKey string, lockTTL time.Duration) (string, error) {
+	lockExpires := time.Now().Add(lockTTL).Format(time.RFC3339)
+
+	_, err := b.s3api.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(lockKey),
+		Body:   bytes.NewReader([]byte("")),
+		Metadata: map[string]string{
+			"lock-expires": lockExpires,
+			"lock-created": time.Now().Format(time.RFC3339),
+		},
+		IfNoneMatch: aws.String("*"),
+	})
+
+	if err != nil {
+		if !isIfNoneMatchError(err) {
+			return "", fmt.Errorf("failed to acquire lock: %w", err)
+		}
+
+		// Lock exists. Check if expired and clean up if necessary.
+		objInfo := &contracts.ObjectInfo{}
+		if headErr := b.HeadObject(ctx, lockKey, objInfo); headErr == nil {
+			if lockIsExpired(objInfo.Metadata["lock-expires"]) {
+				// Lock expired - delete with ETag for consistency
+				_ = b.deleteObjectSafe(ctx, lockKey, objInfo.Metadata["etag"])
+			}
+		}
+
+		// Lock exists (or was expired and cleaned)
+		return "", &lockExistsError{key: strings.TrimSuffix(lockKey, ".lock")}
+	}
+
+	// Lock acquired successfully. Return empty ETag since we use unconditional
+	// deletes for locks (efficiency over extra HEAD call; acceptable for ephemeral objects).
+	return "", nil
+}
+
+func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Duration) error {
+	_, err := b.acquireLock(ctx, key+".lock", lockTTL)
+	if err != nil {
+		return err
+	}
+	// Lock acquired. Caller MUST call ReleaseLock() via defer() to clean up.
+	// If context is canceled, caller's defer chain executes before return.
+	return nil
+}
+
+func lockIsExpired(expiredStr string) bool {
+	if expiredStr == "" {
+		return false
+	}
+	expiredTime, err := time.Parse(time.RFC3339, expiredStr)
+	if err != nil {
+		return false
+	}
+	return time.Now().After(expiredTime)
+}
+
+func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error {
+	// Validate: waitTimeout should be >= lockTTL, otherwise timeout happens before lock expires
+	if waitTimeout < lockTTL {
+		return fmt.Errorf("waitTimeout (%v) must be >= lockTTL (%v)", waitTimeout, lockTTL)
+	}
+
+	deadline := time.Now().Add(waitTimeout)
+	backoff := 100 * time.Millisecond
+	maxBackoff := 2 * time.Second
+
+	for {
+		err := b.GetLock(ctx, key, lockTTL)
+		if err == nil {
+			return nil
+		}
+
+		// Only retry on lock exists error, propagate other errors
+		var lockErr *lockExistsError
+		if !errors.As(err, &lockErr) {
+			return err
+		}
+
+		if time.Now().Add(backoff).After(deadline) {
+			return fmt.Errorf("timeout waiting for lock after %v", waitTimeout)
+		}
+
+		select {
+		case <-time.After(backoff):
+			// Continue loop
+		case <-ctx.Done():
+			// Context canceled during backoff. No lock acquired yet, so nothing to clean up.
+			return ctx.Err()
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+func (b *bucketAdapter) ReleaseLock(ctx context.Context, key string) error {
+	lockKey := key + ".lock"
+	// Delete unconditionally for full idempotence. Lock files should never be
+	// modified concurrently, so we don't need ETag-based conditional delete.
+	return b.deleteObjectSafe(ctx, lockKey, "")
+}
+
+func isIfNoneMatchError(err error) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed"
 }
 
 // initTransferManager initializes transfer manager with defaults optimized for Lambda
