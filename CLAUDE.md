@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Storage Adapter
+
+The S3 storage adapter uses AWS Transfer Manager for:
+- **GetObject**: Automatic retry support with streaming
+- **UploadObject**: Multipart uploads with Lambda-optimized defaults
+- **HeadObject**: Direct S3 API (metadata-only operation)
+
+Default configuration (Lambda-optimized):
+- Concurrency: 1 (sequential processing)
+- Part Size: 5MB
+- Multipart Threshold: 10MB
+
 ## Git Workflow (GitFlow)
 
 This project follows a simplified GitFlow branching model:
