@@ -80,28 +80,6 @@ func TestNewStorageAPI_PropagatesLoadError(t *testing.T) {
 	}
 }
 
-func TestNewBucket_PropagatesLoadError(t *testing.T) {
-	restore := injectS3LoadError(t)
-	defer restore()
-
-	sc := &S3Client{} // client == nil → defaultClient → newS3Client → fails
-	_, err := sc.NewBucket("bn")
-	if err == nil || err.Error() != "injected s3 load error" {
-		t.Fatalf("expected load error, got %v", err)
-	}
-}
-
-func TestDefaultClient_PropagatesLoadError(t *testing.T) {
-	restore := injectS3LoadError(t)
-	defer restore()
-
-	sc := &S3Client{} // client == nil
-	_, err := sc.defaultClient()
-	if err == nil || err.Error() != "injected s3 load error" {
-		t.Fatalf("expected load error, got %v", err)
-	}
-}
-
 func TestNewBucket_EmptyName(t *testing.T) {
 	sc := &S3Client{}
 	if _, err := sc.NewBucket(""); err == nil {
@@ -196,7 +174,7 @@ func TestGetObject_EdgeCases_NoETagNoLength(t *testing.T) {
 	payload := []byte("abc")
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(payload))}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	if err := b.GetObject(context.Background(), "k", gotObj); err != nil {
 		t.Fatalf("GetObject failed: %v", err)
@@ -214,7 +192,7 @@ func TestPutObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(nil, errors.New("puterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.PutObject(context.Background(), &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: io.NopCloser(bytes.NewReader([]byte("d")))}); err == nil {
 		t.Fatalf("expected error from PutObject")
 	}
@@ -227,28 +205,13 @@ func TestHeadObject_NoETag(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(&s3sdk.HeadObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	var info contracts.ObjectInfo
 	if err := b.HeadObject(context.Background(), "k", &info); err != nil {
 		t.Fatalf("HeadObject failed: %v", err)
 	}
 	if len(info.Metadata) != 0 {
 		t.Fatalf("expected empty meta, got: %v", info.Metadata)
-	}
-}
-
-func TestS3Client_defaultClient_ReturnsCached(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	m := mock.NewMockS3API(ctrl)
-	sc := &S3Client{client: m}
-	c, err := sc.defaultClient()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c != m {
-		t.Fatalf("expected cached client returned")
 	}
 }
 
@@ -271,7 +234,7 @@ func TestGetHeadPut_MetadataAndFields(t *testing.T) {
 	body := io.NopCloser(bytes.NewReader([]byte("payload")))
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{ETag: &etag, ContentLength: &cl, ContentType: &ct, Body: body}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	require.NoError(t, b.GetObject(context.Background(), "k", gotObj))
 	require.Equal(t, "k", gotObj.Info.Key)
@@ -324,7 +287,7 @@ func TestPutObject_NilAndEmptyKey(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.PutObject(context.Background(), nil); err == nil {
 		t.Fatalf("expected error for nil object")
 	}
@@ -341,7 +304,7 @@ func TestPutObject_ClosesBody(t *testing.T) {
 	// Expect PutObject called once
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(&s3sdk.PutObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	tr := &trackingReadCloser{r: bytes.NewReader([]byte("x"))}
 	obj := &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: tr}
 	require.NoError(t, b.PutObject(context.Background(), obj))
@@ -356,7 +319,7 @@ func TestGetObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(nil, errors.New("geterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	if err := b.GetObject(context.Background(), "k", &contracts.BucketObject{}); err == nil {
 		t.Fatalf("expected error from GetObject")
 	}
@@ -368,7 +331,7 @@ func TestHeadObject_PropagatesError(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().HeadObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.HeadObjectInput{})).Return(nil, errors.New("headerr"))
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	var info contracts.ObjectInfo
 	if err := b.HeadObject(context.Background(), "k", &info); err == nil {
 		t.Fatalf("expected error from HeadObject")
@@ -382,7 +345,7 @@ func TestGetObject_NilBody(t *testing.T) {
 	// Return output with nil Body
 	m.EXPECT().GetObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.GetObjectInput{})).Return(&s3sdk.GetObjectOutput{ETag: nil, ContentLength: nil, Body: nil}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	gotObj := &contracts.BucketObject{}
 	require.NoError(t, b.GetObject(context.Background(), "k", gotObj))
 	// Body should not be nil (should be NopCloser)
@@ -405,7 +368,7 @@ func TestPutObject_PropagatesClientError_Addition(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).Return(nil, errors.New("puterr"))
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.PutObject(context.Background(), &contracts.BucketObject{Info: contracts.ObjectInfo{Key: "k"}, Body: io.NopCloser(bytes.NewReader([]byte("d")))})
 	if err == nil {
 		t.Fatalf("expected error from PutObject")
@@ -428,7 +391,7 @@ func TestGetLock_Success(t *testing.T) {
 		}).
 		Return(&s3sdk.PutObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
 	require.NoError(t, err)
 }
@@ -445,7 +408,7 @@ func TestGetLock_AlreadyExists(t *testing.T) {
 		},
 	}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "lock already exists")
@@ -458,7 +421,7 @@ func TestGetLock_PropagatesError(t *testing.T) {
 
 	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, errors.New("s3 error"))
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to acquire lock")
@@ -481,7 +444,7 @@ func TestGetLockWait_Success(t *testing.T) {
 		m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(&s3sdk.PutObjectOutput{}, nil),
 	)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	// waitTimeout must be >= lockTTL
 	err := b.GetLockWait(context.Background(), "myfile", 1*time.Second, 5*time.Second)
 	require.NoError(t, err)
@@ -500,7 +463,7 @@ func TestGetLockWait_Timeout(t *testing.T) {
 		},
 	}, nil).MinTimes(2)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	// lockTTL=100ms, waitTimeout=500ms (valid: waitTimeout >= lockTTL)
 	err := b.GetLockWait(context.Background(), "myfile", 100*time.Millisecond, 500*time.Millisecond)
 	require.Error(t, err)
@@ -512,7 +475,7 @@ func TestGetLockWait_InvalidTimeout(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	// waitTimeout < lockTTL should fail immediately
 	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 1*time.Minute)
 	require.Error(t, err)
@@ -536,7 +499,7 @@ func TestGetLockWait_ContextCancelledDuringBackoff(t *testing.T) {
 	// No DeleteObject expected—context canceled during backoff (no lock acquired yet)
 	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Times(0)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -563,7 +526,7 @@ func TestReleaseLock_Success(t *testing.T) {
 		}).
 		Return(&s3sdk.DeleteObjectOutput{}, nil)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.ReleaseLock(context.Background(), "myfile")
 	require.NoError(t, err)
 }
@@ -577,7 +540,7 @@ func TestReleaseLock_Idempotent(t *testing.T) {
 	noSuchKeyErr := &mockAPIError{code: "NoSuchKey"}
 	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(nil, noSuchKeyErr)
 
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}}
 	err := b.ReleaseLock(context.Background(), "myfile")
 	require.NoError(t, err)
 }
