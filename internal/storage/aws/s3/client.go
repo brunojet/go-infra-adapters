@@ -316,15 +316,9 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 
 func (b *bucketAdapter) ReleaseLock(ctx context.Context, key string) error {
 	lockKey := key + ".lock"
-	objInfo := &contracts.ObjectInfo{}
-	err := b.HeadObject(ctx, lockKey, objInfo)
-
-	eTag := ""
-	if err == nil && len(objInfo.Metadata) > 0 {
-		eTag = objInfo.Metadata["etag"]
-	}
-
-	return b.deleteObjectSafe(ctx, lockKey, eTag)
+	// Delete unconditionally for full idempotence. Lock files should never be
+	// modified concurrently, so we don't need ETag-based conditional delete.
+	return b.deleteObjectSafe(ctx, lockKey, "")
 }
 
 func isIfNoneMatchError(err error) bool {

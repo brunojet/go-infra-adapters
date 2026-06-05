@@ -510,13 +510,10 @@ func TestReleaseLock_Success(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
-	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
-		ETag: goaws.String("abc123"),
-	}, nil)
 	m.EXPECT().DeleteObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.DeleteObjectInput{})).
 		Do(func(ctx context.Context, input *s3sdk.DeleteObjectInput, optFns ...func(*s3sdk.Options)) {
-			require.NotNil(t, input.IfMatch)
-			require.Equal(t, "abc123", *input.IfMatch)
+			// Unconditional delete (no IfMatch)
+			require.Nil(t, input.IfMatch)
 		}).
 		Return(&s3sdk.DeleteObjectOutput{}, nil)
 
@@ -530,9 +527,9 @@ func TestReleaseLock_Idempotent(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
+	// NoSuchKey is ignored (idempotent)
 	noSuchKeyErr := &mockAPIError{code: "NoSuchKey"}
-	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, noSuchKeyErr)
-	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(&s3sdk.DeleteObjectOutput{}, nil)
+	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(nil, noSuchKeyErr)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
 	err := b.ReleaseLock(context.Background(), "myfile")
