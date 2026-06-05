@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	goaws "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	s3sdk "github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
@@ -408,4 +410,126 @@ func TestPutObject_PropagatesClientError_Addition(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error from PutObject")
 	}
+}
+
+func TestGetLock_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	m.EXPECT().PutObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.PutObjectInput{})).
+		Do(func(ctx context.Context, input *s3sdk.PutObjectInput, optFns ...func(*s3sdk.Options)) {
+			require.Equal(t, "myfile.lock", *input.Key) // .lock appended internally
+			require.NotNil(t, input.Metadata)
+			require.Contains(t, input.Metadata, "lock-expires")
+			require.Contains(t, input.Metadata, "lock-created")
+			require.NotNil(t, input.IfNoneMatch)
+			require.Equal(t, "*", *input.IfNoneMatch)
+		}).
+		Return(&s3sdk.PutObjectOutput{}, nil)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
+	require.NoError(t, err)
+}
+
+func TestGetLock_AlreadyExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError())
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "lock already exists")
+}
+
+func TestGetLock_PropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, errors.New("s3 error"))
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to acquire lock")
+}
+
+func TestGetLockWait_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	gomock.InOrder(
+		m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError()),
+		m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(&s3sdk.PutObjectOutput{}, nil),
+	)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 1*time.Second)
+	require.NoError(t, err)
+}
+
+func TestGetLockWait_Timeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError()).MinTimes(2)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 100*time.Millisecond)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "timeout waiting for lock")
+}
+
+func TestReleaseLock_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
+		ETag: goaws.String("abc123"),
+	}, nil)
+	m.EXPECT().DeleteObject(gomock.Any(), gomock.AssignableToTypeOf(&s3sdk.DeleteObjectInput{})).
+		Do(func(ctx context.Context, input *s3sdk.DeleteObjectInput, optFns ...func(*s3sdk.Options)) {
+			require.NotNil(t, input.IfMatch)
+			require.Equal(t, "abc123", *input.IfMatch)
+		}).
+		Return(&s3sdk.DeleteObjectOutput{}, nil)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.ReleaseLock(context.Background(), "myfile")
+	require.NoError(t, err)
+}
+
+func TestReleaseLock_Idempotent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	noSuchKeyErr := &mockAPIError{code: "NoSuchKey"}
+	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, noSuchKeyErr)
+	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(&s3sdk.DeleteObjectOutput{}, nil)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	err := b.ReleaseLock(context.Background(), "myfile")
+	require.NoError(t, err)
+}
+
+type mockAPIError struct {
+	code string
+}
+
+func (m *mockAPIError) Error() string              { return m.code }
+func (m *mockAPIError) ErrorCode() string         { return m.code }
+func (m *mockAPIError) ErrorMessage() string      { return m.code }
+func (m *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
+
+func newMockPreconditionFailedError() smithy.APIError {
+	return &mockAPIError{code: "PreconditionFailed"}
 }

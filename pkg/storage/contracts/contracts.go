@@ -6,6 +6,7 @@ package contracts
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // ObjectInfo contains metadata about an object stored in a bucket.
@@ -58,6 +59,27 @@ type BucketAdapter interface {
 	// identified by `key`. The caller must supply a non-nil `objInfo`. Returns
 	// an error if `objInfo` is nil.
 	HeadObject(ctx context.Context, key string, objInfo *ObjectInfo) error
+
+	// GetLock attempts to acquire a distributed lock for the given file key.
+	// Internally creates a lock file by appending ".lock" to the key.
+	// lockTTL specifies how long the lock is valid. Returns nil if lock is acquired, or an
+	// error if the lock already exists or S3 operation fails. The operation is atomic
+	// (uses conditional put - only succeeds if object doesn't exist).
+	GetLock(ctx context.Context, key string, lockTTL time.Duration) error
+
+	// GetLockWait attempts to acquire a distributed lock with automatic retry and backoff.
+	// Internally creates a lock file by appending ".lock" to the key.
+	// lockTTL specifies how long the lock is valid. waitTimeout specifies how long to wait
+	// for the lock before returning an error. Uses exponential backoff starting at 100ms
+	// (capped at 2s). Returns nil if lock is acquired, or an error if timeout or S3
+	// operation fails.
+	GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error
+
+	// ReleaseLock deletes the lock file for the given key (appends ".lock" internally).
+	// This operation is idempotent—it returns nil even if the lock doesn't exist.
+	// Uses conditional delete (IfMatch with ETag) to ensure atomic deletion, falling back
+	// to unconditional delete if ETag unavailable.
+	ReleaseLock(ctx context.Context, key string) error
 }
 
 // StorageAPI constructs per-bucket adapters.

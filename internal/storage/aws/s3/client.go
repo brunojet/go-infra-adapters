@@ -1,14 +1,18 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 
 	"github.com/brunojet/go-infra-adapters/v4/pkg/storage/contracts"
 )
@@ -193,6 +197,112 @@ func (b *bucketAdapter) HeadObject(ctx context.Context, key string, objInfo *con
 
 	*objInfo = contracts.ObjectInfo{Key: key, Size: size, ContentType: contentType, Metadata: meta}
 	return nil
+}
+
+// lockExistsError indicates that a lock already exists for a key.
+type lockExistsError struct {
+	key string
+}
+
+func (e *lockExistsError) Error() string {
+	return fmt.Sprintf("lock already exists for key %s", e.key)
+}
+
+func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Duration) error {
+	lockKey := key + ".lock"
+	lockExpires := time.Now().Add(lockTTL).Format(time.RFC3339)
+
+	_, err := b.s3api.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(lockKey),
+		Body:   bytes.NewReader([]byte("")),
+		Metadata: map[string]string{
+			"lock-expires": lockExpires,
+			"lock-created": time.Now().Format(time.RFC3339),
+		},
+		IfNoneMatch: aws.String("*"),
+	})
+
+	if err != nil {
+		if isIfNoneMatchError(err) {
+			return &lockExistsError{key: key}
+		}
+		return fmt.Errorf("failed to acquire lock: %w", err)
+	}
+
+	return nil
+}
+
+func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error {
+	deadline := time.Now().Add(waitTimeout)
+	backoff := 100 * time.Millisecond
+	maxBackoff := 2 * time.Second
+
+	for {
+		err := b.GetLock(ctx, key, lockTTL)
+		if err == nil {
+			return nil
+		}
+
+		// Only retry on lock exists error, propagate other errors
+		var lockErr *lockExistsError
+		if !errors.As(err, &lockErr) {
+			return err
+		}
+
+		if time.Now().Add(backoff).After(deadline) {
+			return fmt.Errorf("timeout waiting for lock after %v", waitTimeout)
+		}
+
+		select {
+		case <-time.After(backoff):
+			// Continue loop
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		backoff = backoff * 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+func (b *bucketAdapter) ReleaseLock(ctx context.Context, key string) error {
+	lockKey := key + ".lock"
+	objInfo := &contracts.ObjectInfo{}
+	err := b.HeadObject(ctx, lockKey, objInfo)
+
+	eTag := ""
+	if err == nil && len(objInfo.Metadata) > 0 {
+		eTag = objInfo.Metadata["etag"]
+	}
+
+	deleteInput := &s3.DeleteObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(lockKey),
+	}
+
+	if eTag != "" {
+		deleteInput.IfMatch = aws.String(eTag)
+	}
+
+	_, err = b.s3api.DeleteObject(ctx, deleteInput)
+
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
+			return nil
+		}
+		return fmt.Errorf("failed to release lock: %w", err)
+	}
+
+	return nil
+}
+
+func isIfNoneMatchError(err error) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed"
 }
 
 // initTransferManager initializes transfer manager with defaults optimized for Lambda
