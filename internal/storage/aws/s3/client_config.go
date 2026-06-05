@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
@@ -117,4 +118,42 @@ func newS3Client(cfg *adapterConfig) (S3API, error) {
 		return nil, err
 	}
 	return s3.NewFromConfig(awsCfg), nil
+}
+
+func initTransferManager(s3client *s3.Client, cfg *adapterConfig) TransferManagerAPI {
+	// Set defaults: these are tuned for Lambda (low memory, sequential processing)
+	concurrency := 1                     // Lambda: sequential only
+	partSize := int64(5 * 1024 * 1024)   // 5MB per part
+	threshold := int64(10 * 1024 * 1024) // Use multipart for >10MB
+
+	// Allow overrides via config
+	if cfg.transferManagerConcurrency > 0 {
+		concurrency = cfg.transferManagerConcurrency
+	}
+	if cfg.transferManagerPartSize > 0 {
+		partSize = cfg.transferManagerPartSize
+	}
+	if cfg.transferManagerThreshold > 0 {
+		threshold = cfg.transferManagerThreshold
+	}
+
+	return transfermanager.New(s3client, func(opts *transfermanager.Options) {
+		opts.Concurrency = concurrency
+		opts.PartSizeBytes = partSize
+		opts.MultipartUploadThreshold = threshold
+	})
+}
+
+func newTransferManager(client S3API, cfg *adapterConfig) (TransferManagerAPI, error) {
+	var transferMgr TransferManagerAPI
+	if cfg.transferManager != nil {
+		transferMgr = cfg.transferManager
+	} else {
+		s3client, ok := client.(*s3.Client)
+		if !ok {
+			return nil, errors.New("S3 client must be *s3.Client to initialize transfer manager")
+		}
+		transferMgr = initTransferManager(s3client, cfg)
+	}
+	return transferMgr, nil
 }
