@@ -104,6 +104,17 @@ type bucketAdapter struct {
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
 
+// cleanupOnContextDone deletes a key if context was cancelled/deadline exceeded,
+// then returns the context error. Used to clean up locks/partial uploads on ctx.Done().
+func (b *bucketAdapter) cleanupOnContextDone(ctx context.Context, key string) error {
+	err := ctx.Err()
+	if err != nil {
+		// Context cancelled or deadline exceeded - clean up key
+		_ = b.deleteObjectSafe(ctx, key, "")
+	}
+	return err
+}
+
 // deleteObjectSafe deletes an object, ignoring NoSuchKey errors (idempotent).
 // If eTag is provided, uses conditional delete (IfMatch) for atomicity.
 func (b *bucketAdapter) deleteObjectSafe(ctx context.Context, key, eTag string) error {
@@ -310,10 +321,8 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 		case <-time.After(backoff):
 			// Continue loop
 		case <-ctx.Done():
-			// Context cancelled. If we somehow acquired lock, clean it up.
-			// This handles race where we got the lock just before context cancellation.
-			_ = b.deleteObjectSafe(ctx, lockKey, "")
-			return ctx.Err()
+			// Context cancelled - clean up lock and return error
+			return b.cleanupOnContextDone(ctx, lockKey)
 		}
 
 		backoff = backoff * 2
