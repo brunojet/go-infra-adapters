@@ -439,6 +439,11 @@ func TestGetLock_AlreadyExists(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 
 	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError())
+	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
+		Metadata: map[string]string{
+			"lock-expires": time.Now().Add(1 * time.Hour).Format(time.RFC3339), // Still valid
+		},
+	}, nil)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
 	err := b.GetLock(context.Background(), "myfile", 5*time.Minute)
@@ -465,7 +470,14 @@ func TestGetLockWait_Success(t *testing.T) {
 	m := mock.NewMockS3API(ctrl)
 
 	gomock.InOrder(
+		// First attempt: PUT fails, HEAD shows valid lock
 		m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError()),
+		m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
+			Metadata: map[string]string{
+				"lock-expires": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+			},
+		}, nil),
+		// Retry: PUT succeeds
 		m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(&s3sdk.PutObjectOutput{}, nil),
 	)
 
@@ -479,7 +491,13 @@ func TestGetLockWait_Timeout(t *testing.T) {
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
 
+	// Lock always exists and is valid (not expired)
 	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError()).MinTimes(2)
+	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
+		Metadata: map[string]string{
+			"lock-expires": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+		},
+	}, nil).MinTimes(2)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
 	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 100*time.Millisecond)

@@ -224,13 +224,38 @@ func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Du
 	})
 
 	if err != nil {
-		if isIfNoneMatchError(err) {
-			return &lockExistsError{key: key}
+		if !isIfNoneMatchError(err) {
+			return fmt.Errorf("failed to acquire lock: %w", err)
 		}
-		return fmt.Errorf("failed to acquire lock: %w", err)
+
+		// Lock exists. Check if expired and clean up if necessary.
+		objInfo := &contracts.ObjectInfo{}
+		if headErr := b.HeadObject(ctx, lockKey, objInfo); headErr == nil {
+			if lockIsExpired(objInfo.Metadata["lock-expires"]) {
+				// Lock expired - delete it and return error so caller can retry
+				_, _ = b.s3api.DeleteObject(ctx, &s3.DeleteObjectInput{
+					Bucket: aws.String(b.bucket),
+					Key:    aws.String(lockKey),
+				})
+			}
+		}
+
+		// Lock exists (or was expired and cleaned)
+		return &lockExistsError{key: key}
 	}
 
 	return nil
+}
+
+func lockIsExpired(expiredStr string) bool {
+	if expiredStr == "" {
+		return false
+	}
+	expiredTime, err := time.Parse(time.RFC3339, expiredStr)
+	if err != nil {
+		return false
+	}
+	return time.Now().After(expiredTime)
 }
 
 func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error {

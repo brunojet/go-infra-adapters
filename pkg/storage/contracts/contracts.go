@@ -62,21 +62,23 @@ type BucketAdapter interface {
 
 	// GetLock attempts to acquire a distributed lock for the given file key.
 	// Internally creates a lock file by appending ".lock" to the key.
-	// lockTTL specifies how long the lock is valid. Returns nil if lock is acquired, or an
-	// error if the lock already exists or S3 operation fails. The operation is atomic
-	// (uses conditional put - only succeeds if object doesn't exist).
+	// lockTTL specifies how long the lock is valid. CRITICAL: lockTTL MUST be greater than
+	// the maximum expected execution time to prevent race conditions. Returns nil if lock
+	// is acquired, or an error if the lock already exists or S3 operation fails. Expired
+	// locks are automatically cleaned up. The operation is atomic (uses conditional put).
 	GetLock(ctx context.Context, key string, lockTTL time.Duration) error
 
 	// GetLockWait attempts to acquire a distributed lock with automatic retry and backoff.
 	// Internally creates a lock file by appending ".lock" to the key.
 	// lockTTL specifies how long the lock is valid. waitTimeout specifies how long to wait
 	// for the lock before returning an error. Uses exponential backoff starting at 100ms
-	// (capped at 2s). Returns nil if lock is acquired, or an error if timeout or S3
-	// operation fails.
+	// (capped at 2s). CRITICAL: Same TTL constraint as GetLock - must exceed max execution
+	// time. Returns nil if lock is acquired, or an error if timeout or S3 operation fails.
 	GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error
 
 	// ReleaseLock deletes the lock file for the given key (appends ".lock" internally).
 	// This operation is idempotent—it returns nil even if the lock doesn't exist.
+	// CRITICAL: Must be called via defer() to ensure cleanup even on panic or early return.
 	// Uses conditional delete (IfMatch with ETag) to ensure atomic deletion, falling back
 	// to unconditional delete if ETag unavailable.
 	ReleaseLock(ctx context.Context, key string) error
