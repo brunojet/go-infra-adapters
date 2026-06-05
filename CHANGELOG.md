@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/brunojet/go-infra-adapters/compare/v4.1.0...v4.2.0) (2026-06-05)
+
+
+### Features
+
+* **storage:** add distributed lock API for S3 bucket adapter ([a264f03](https://github.com/brunojet/go-infra-adapters/commit/a264f034de1796f8258e0918afdb6ba12777617e))
+
 ## [4.1.0](https://github.com/brunojet/go-infra-adapters/compare/v4.0.0...v4.1.0) (2026-06-05)
 
 
