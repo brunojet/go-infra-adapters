@@ -276,6 +276,12 @@ func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Du
 		return &lockExistsError{key: key}
 	}
 
+	// Lock acquired successfully. Check if context was cancelled after acquisition
+	// to avoid orphaning the lock if caller abandons due to context cancellation.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return b.cleanupOnContextDone(ctx, lockKey)
+	}
+
 	return nil
 }
 
