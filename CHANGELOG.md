@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.0](https://github.com/brunojet/go-infra-adapters/compare/v4.1.0...v5.0.0) (2026-06-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* none (new methods only)
+
+### release
+
+* distribute lock API for S3 adapter (v3.2.0) ([1953e4e](https://github.com/brunojet/go-infra-adapters/commit/1953e4e91ede45a347a01f681f489cdea100fbf4))
+
 ## [4.1.0](https://github.com/brunojet/go-infra-adapters/compare/v4.0.0...v4.1.0) (2026-06-05)
 
 
