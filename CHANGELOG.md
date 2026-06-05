@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.1](https://github.com/brunojet/go-infra-adapters/compare/v4.2.0...v4.2.1) (2026-06-05)
+
+
+### Code Refactoring
+
+* **storage:** extract magic strings and numbers to constants ([#51](https://github.com/brunojet/go-infra-adapters/issues/51)) ([5bc744a](https://github.com/brunojet/go-infra-adapters/commit/5bc744ad63abed52e8a1d18c7b440fe39fa51499))
+
 ## [4.2.0](https://github.com/brunojet/go-infra-adapters/compare/v4.1.0...v4.2.0) (2026-06-05)
 
 
