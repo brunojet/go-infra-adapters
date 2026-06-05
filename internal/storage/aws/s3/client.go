@@ -280,6 +280,12 @@ func lockIsExpired(expiredStr string) bool {
 }
 
 func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, waitTimeout time.Duration) error {
+	// Validate: waitTimeout should be >= lockTTL, otherwise timeout happens before lock expires
+	if waitTimeout < lockTTL {
+		return fmt.Errorf("waitTimeout (%v) must be >= lockTTL (%v)", waitTimeout, lockTTL)
+	}
+
+	lockKey := key + ".lock"
 	deadline := time.Now().Add(waitTimeout)
 	backoff := 100 * time.Millisecond
 	maxBackoff := 2 * time.Second
@@ -304,6 +310,9 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 		case <-time.After(backoff):
 			// Continue loop
 		case <-ctx.Done():
+			// Context cancelled. If we somehow acquired lock, clean it up.
+			// This handles race where we got the lock just before context cancellation.
+			_ = b.deleteObjectSafe(ctx, lockKey, "")
 			return ctx.Err()
 		}
 

@@ -482,7 +482,8 @@ func TestGetLockWait_Success(t *testing.T) {
 	)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
-	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 1*time.Second)
+	// waitTimeout must be >= lockTTL
+	err := b.GetLockWait(context.Background(), "myfile", 1*time.Second, 5*time.Second)
 	require.NoError(t, err)
 }
 
@@ -500,9 +501,54 @@ func TestGetLockWait_Timeout(t *testing.T) {
 	}, nil).MinTimes(2)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
-	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 100*time.Millisecond)
+	// lockTTL=100ms, waitTimeout=500ms (valid: waitTimeout >= lockTTL)
+	err := b.GetLockWait(context.Background(), "myfile", 100*time.Millisecond, 500*time.Millisecond)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timeout waiting for lock")
+}
+
+func TestGetLockWait_InvalidTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+	// waitTimeout < lockTTL should fail immediately
+	err := b.GetLockWait(context.Background(), "myfile", 5*time.Minute, 1*time.Minute)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "waitTimeout")
+	require.Contains(t, err.Error(), "lockTTL")
+}
+
+func TestGetLockWait_ContextCancelledCleansUp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mock.NewMockS3API(ctrl)
+
+	// Lock exists (forces retry in loop)
+	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, newMockPreconditionFailedError()).MinTimes(1)
+	m.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(&s3sdk.HeadObjectOutput{
+		Metadata: map[string]string{
+			"lock-expires": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+		},
+	}, nil).MinTimes(1)
+
+	// DeleteObject called on context cancellation (cleanup)
+	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(&s3sdk.DeleteObjectOutput{}, nil).Times(1)
+
+	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel context after short delay (during backoff)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := b.GetLockWait(ctx, "myfile", 100*time.Millisecond, 10*time.Second)
+	require.Error(t, err)
+	require.Equal(t, context.Canceled, err)
 }
 
 func TestReleaseLock_Success(t *testing.T) {
