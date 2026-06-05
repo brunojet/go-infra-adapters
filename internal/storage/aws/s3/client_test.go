@@ -521,7 +521,7 @@ func TestGetLockWait_InvalidTimeout(t *testing.T) {
 	require.Contains(t, err.Error(), "lockTTL")
 }
 
-func TestGetLockWait_ContextCancelledCleansUp(t *testing.T) {
+func TestGetLockWait_ContextCancelledDuringBackoff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	m := mock.NewMockS3API(ctrl)
@@ -534,14 +534,14 @@ func TestGetLockWait_ContextCancelledCleansUp(t *testing.T) {
 		},
 	}, nil).MinTimes(1)
 
-	// DeleteObject called on context cancellation (cleanup)
-	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(&s3sdk.DeleteObjectOutput{}, nil).Times(1)
+	// No DeleteObject expected—context cancelled during backoff (no lock acquired yet)
+	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Times(0)
 
 	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Cancel context after short delay (during backoff)
+	// Cancel context during backoff (before lock acquisition)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		cancel()

@@ -105,16 +105,6 @@ type bucketAdapter struct {
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
 
-// cleanupOnContextDone deletes a key if context was cancelled/deadline exceeded,
-// then returns the context error. Used to clean up locks/partial uploads on ctx.Done().
-func (b *bucketAdapter) cleanupOnContextDone(ctx context.Context, key string) error {
-	err := ctx.Err()
-	if err != nil {
-		// Context cancelled or deadline exceeded - clean up key
-		_ = b.deleteObjectSafe(ctx, key, "")
-	}
-	return err
-}
 
 // deleteObjectSafe deletes an object, ignoring NoSuchKey errors (idempotent).
 // If eTag is provided, uses conditional delete (IfMatch) for atomicity.
@@ -285,20 +275,12 @@ func (b *bucketAdapter) acquireLock(ctx context.Context, lockKey string, lockTTL
 }
 
 func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Duration) error {
-	lockKey := key + ".lock"
-	etag, err := b.acquireLock(ctx, lockKey, lockTTL)
+	_, err := b.acquireLock(ctx, key+".lock", lockTTL)
 	if err != nil {
 		return err
 	}
-
-	// Lock acquired successfully. Check if context was cancelled after acquisition
-	// to avoid orphaning the lock if caller abandons due to context cancellation.
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		// Use ETag for consistent conditional delete
-		_ = b.deleteObjectSafe(ctx, lockKey, etag)
-		return ctxErr
-	}
-
+	// Lock acquired. Caller MUST call ReleaseLock() via defer() to clean up.
+	// If context is cancelled, caller's defer chain executes before return.
 	return nil
 }
 
@@ -319,7 +301,6 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 		return fmt.Errorf("waitTimeout (%v) must be >= lockTTL (%v)", waitTimeout, lockTTL)
 	}
 
-	lockKey := key + ".lock"
 	deadline := time.Now().Add(waitTimeout)
 	backoff := 100 * time.Millisecond
 	maxBackoff := 2 * time.Second
@@ -344,8 +325,8 @@ func (b *bucketAdapter) GetLockWait(ctx context.Context, key string, lockTTL, wa
 		case <-time.After(backoff):
 			// Continue loop
 		case <-ctx.Done():
-			// Context cancelled - clean up lock and return error
-			return b.cleanupOnContextDone(ctx, lockKey)
+			// Context cancelled during backoff. No lock acquired yet, so nothing to clean up.
+			return ctx.Err()
 		}
 
 		backoff = backoff * 2
