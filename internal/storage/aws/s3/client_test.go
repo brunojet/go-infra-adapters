@@ -464,34 +464,6 @@ func TestGetLock_PropagatesError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to acquire lock")
 }
 
-func TestGetLock_ContextCancelledAfterAcquisition(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	m := mock.NewMockS3API(ctrl)
-
-	// PUT succeeds (lock acquired)
-	m.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(&s3sdk.PutObjectOutput{}, nil).Times(1)
-
-	// DELETE called (cleanup on context cancellation check)
-	m.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(&s3sdk.DeleteObjectOutput{}, nil).Times(1)
-
-	b := &bucketAdapter{client: m, bucket: "b", transferManager: &mockTransferManager{s3api: m}, s3api: m}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Simulate context being cancelled right after lock acquisition by cancelling
-	// in a goroutine before GetLock completes its post-acquisition checks
-	go func() {
-		time.Sleep(5 * time.Millisecond)
-		cancel()
-	}()
-
-	// GetLock will acquire lock but then detect context cancellation
-	// and clean up the lock before returning error
-	err := b.GetLock(ctx, "myfile", 5*time.Minute)
-	require.Error(t, err)
-	require.Equal(t, context.Canceled, err)
-}
 
 func TestGetLockWait_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)

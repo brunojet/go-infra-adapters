@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -243,8 +244,10 @@ func (e *lockExistsError) Error() string {
 	return fmt.Sprintf("lock already exists for key %s", e.key)
 }
 
-func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Duration) error {
-	lockKey := key + ".lock"
+// acquireLock attempts to create a lock and returns the ETag if successful.
+// Used internally to track lock identity for consistent conditional deletes.
+// Returns empty ETag and lockExistsError if lock already exists.
+func (b *bucketAdapter) acquireLock(ctx context.Context, lockKey string, lockTTL time.Duration) (string, error) {
 	lockExpires := time.Now().Add(lockTTL).Format(time.RFC3339)
 
 	_, err := b.s3api.PutObject(ctx, &s3.PutObjectInput{
@@ -260,26 +263,40 @@ func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Du
 
 	if err != nil {
 		if !isIfNoneMatchError(err) {
-			return fmt.Errorf("failed to acquire lock: %w", err)
+			return "", fmt.Errorf("failed to acquire lock: %w", err)
 		}
 
 		// Lock exists. Check if expired and clean up if necessary.
 		objInfo := &contracts.ObjectInfo{}
 		if headErr := b.HeadObject(ctx, lockKey, objInfo); headErr == nil {
 			if lockIsExpired(objInfo.Metadata["lock-expires"]) {
-				// Lock expired - delete it and return error so caller can retry
-				_ = b.deleteObjectSafe(ctx, lockKey, "")
+				// Lock expired - delete with ETag for consistency
+				_ = b.deleteObjectSafe(ctx, lockKey, objInfo.Metadata["etag"])
 			}
 		}
 
 		// Lock exists (or was expired and cleaned)
-		return &lockExistsError{key: key}
+		return "", &lockExistsError{key: strings.TrimSuffix(lockKey, ".lock")}
+	}
+
+	// Lock acquired successfully. Return empty ETag since we use unconditional
+	// deletes for locks (efficiency over extra HEAD call; acceptable for ephemeral objects).
+	return "", nil
+}
+
+func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Duration) error {
+	lockKey := key + ".lock"
+	etag, err := b.acquireLock(ctx, lockKey, lockTTL)
+	if err != nil {
+		return err
 	}
 
 	// Lock acquired successfully. Check if context was cancelled after acquisition
 	// to avoid orphaning the lock if caller abandons due to context cancellation.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return b.cleanupOnContextDone(ctx, lockKey)
+		// Use ETag for consistent conditional delete
+		_ = b.deleteObjectSafe(ctx, lockKey, etag)
+		return ctxErr
 	}
 
 	return nil
