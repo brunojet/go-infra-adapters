@@ -104,6 +104,30 @@ type bucketAdapter struct {
 
 func (b *bucketAdapter) BucketName() string { return b.bucket }
 
+// deleteObjectSafe deletes an object, ignoring NoSuchKey errors (idempotent).
+// If eTag is provided, uses conditional delete (IfMatch) for atomicity.
+func (b *bucketAdapter) deleteObjectSafe(ctx context.Context, key, eTag string) error {
+	input := &s3.DeleteObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+	}
+
+	if eTag != "" {
+		input.IfMatch = aws.String(eTag)
+	}
+
+	_, err := b.s3api.DeleteObject(ctx, input)
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
+			return nil // Object not found is OK (idempotent)
+		}
+		return fmt.Errorf("failed to delete object: %w", err)
+	}
+
+	return nil
+}
+
 func (b *bucketAdapter) GetObject(ctx context.Context, key string, obj *contracts.BucketObject) error {
 	if obj == nil {
 		return errors.New("nil object")
@@ -233,10 +257,7 @@ func (b *bucketAdapter) GetLock(ctx context.Context, key string, lockTTL time.Du
 		if headErr := b.HeadObject(ctx, lockKey, objInfo); headErr == nil {
 			if lockIsExpired(objInfo.Metadata["lock-expires"]) {
 				// Lock expired - delete it and return error so caller can retry
-				_, _ = b.s3api.DeleteObject(ctx, &s3.DeleteObjectInput{
-					Bucket: aws.String(b.bucket),
-					Key:    aws.String(lockKey),
-				})
+				_ = b.deleteObjectSafe(ctx, lockKey, "")
 			}
 		}
 
@@ -303,26 +324,7 @@ func (b *bucketAdapter) ReleaseLock(ctx context.Context, key string) error {
 		eTag = objInfo.Metadata["etag"]
 	}
 
-	deleteInput := &s3.DeleteObjectInput{
-		Bucket: aws.String(b.bucket),
-		Key:    aws.String(lockKey),
-	}
-
-	if eTag != "" {
-		deleteInput.IfMatch = aws.String(eTag)
-	}
-
-	_, err = b.s3api.DeleteObject(ctx, deleteInput)
-
-	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
-			return nil
-		}
-		return fmt.Errorf("failed to release lock: %w", err)
-	}
-
-	return nil
+	return b.deleteObjectSafe(ctx, lockKey, eTag)
 }
 
 func isIfNoneMatchError(err error) bool {
