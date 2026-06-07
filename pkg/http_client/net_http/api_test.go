@@ -3,6 +3,7 @@ package net_http
 import (
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestApiWrappers_ReturnOptions(t *testing.T) {
@@ -15,8 +16,23 @@ func TestApiWrappers_ReturnOptions(t *testing.T) {
 	if WithRoundTripper(http.DefaultTransport) == nil {
 		t.Fatalf("WithRoundTripper returned nil")
 	}
-	if WithTimeout(10, 20) == nil {
+	if WithTimeout(100*time.Millisecond) == nil {
 		t.Fatalf("WithTimeout returned nil")
+	}
+	if WithMaxIdleConns(50) == nil {
+		t.Fatalf("WithMaxIdleConns returned nil")
+	}
+	if WithMaxIdleConnsPerHost(10) == nil {
+		t.Fatalf("WithMaxIdleConnsPerHost returned nil")
+	}
+	if WithIdleConnTimeout(90*time.Second) == nil {
+		t.Fatalf("WithIdleConnTimeout returned nil")
+	}
+	if WithDialContext(30*time.Second, 30*time.Second) == nil {
+		t.Fatalf("WithDialContext returned nil")
+	}
+	if WithMiddleware(func(rt http.RoundTripper) http.RoundTripper { return rt }) == nil {
+		t.Fatalf("WithMiddleware returned nil")
 	}
 }
 

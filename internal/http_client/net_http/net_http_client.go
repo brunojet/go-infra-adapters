@@ -5,7 +5,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/brunojet/go-infra-adapters/v4/debugassert"
 	"github.com/brunojet/go-infra-adapters/v4/pkg/http_client/contracts"
@@ -21,8 +20,8 @@ func NewNetHttpClient(opts ...HttpClientOption) (contracts.HttpClient, error) {
 	cfg := newHttpClientConfig(opts...)
 
 	client := &http.Client{
-		Transport: cfg.roundTripper,
-		Timeout:   time.Duration(cfg.responseTimeoutMs) * time.Millisecond,
+		Transport: cfg.buildFinalRoundTripper(),
+		Timeout:   cfg.timeout,
 	}
 
 	adapter := &netHttpClient{
