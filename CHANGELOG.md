@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.3.0](https://github.com/brunojet/go-infra-adapters/compare/v4.2.1...v4.3.0) (2026-06-07)
+
+
+### Features
+
+* **cdn:** migrate CloudFront URL signing to AWS SDK native API ([bb6fa8d](https://github.com/brunojet/go-infra-adapters/commit/bb6fa8d95821d61708655d7b63235d6c310ace83))
+* **cdn:** migrate CloudFront URL signing to AWS SDK native API ([3fed9dc](https://github.com/brunojet/go-infra-adapters/commit/3fed9dcdfb92e9ea0845d107bd8920ad8443a44f))
+
 ## [4.2.1](https://github.com/brunojet/go-infra-adapters/compare/v4.2.0...v4.2.1) (2026-06-05)
 
 
