@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.23
+	github.com/aws/aws-sdk-go-v2/feature/cloudfront/sign v1.11.5
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.2.6
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.64.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.2
@@ -14,7 +15,6 @@ require (
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/cloudfront/sign v1.11.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.28 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
