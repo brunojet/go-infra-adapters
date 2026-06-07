@@ -29,16 +29,25 @@ func NewBreakerMiddleware(base http.RoundTripper, opts ...BreakerOption) http.Ro
 	cfg := newCircuitBreakerConfig(opts...)
 	// Guard casts from int -> uint32 to avoid potential overflow warnings
 	maxUint32Int := int(^uint32(0))
-	halfOpen := min(max(cfg.HalfOpenRequests, 0), maxUint32Int)
-	maxFailures := min(max(cfg.MaxFailures, 0), maxUint32Int)
+	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
+	halfOpen := uint32(min(max(cfg.HalfOpenRequests, 0), maxUint32Int))
+	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
+	maxFailures := uint32(min(max(cfg.MaxFailures, 0), maxUint32Int))
 
 	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
 	settings := gobreaker.Settings{
 		Name:        "breaker",
-		MaxRequests: uint32(halfOpen),
+		MaxRequests: halfOpen,
 		Timeout:     cfg.ResetTimeout,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures >= uint32(maxFailures)
+			// Don't trip if below consecutive failure threshold
+			if counts.ConsecutiveFailures < maxFailures || counts.Requests == 0 {
+				return false
+			}
+
+			// Trip if failure rate is high (gradual degradation)
+			failureRate := float64(counts.TotalFailures) / float64(counts.Requests)
+			return failureRate >= 0.5
 		},
 	}
 	return &breakerRoundTripper{next: base, cb: gobreaker.NewCircuitBreaker(settings)}
