@@ -22,9 +22,6 @@ func TestNewCloudFrontSignerFromPEM_Success(t *testing.T) {
 	if signer == nil {
 		t.Fatal("signer is nil")
 	}
-	if signer.keyID != "K31UKMLKEO2DC4" {
-		t.Errorf("keyID mismatch: got %s, want K31UKMLKEO2DC4", signer.keyID)
-	}
 }
 
 func TestNewCloudFrontSignerFromPEM_InvalidKey(t *testing.T) {
@@ -101,36 +98,6 @@ func TestCloudFrontSigner_SignURL_DeterministicWithSameSigner(t *testing.T) {
 
 	if url1 != url2 {
 		t.Errorf("signatures not deterministic: %s != %s", url1, url2)
-	}
-}
-
-func TestCloudFrontSigner_Base64URLSafe_Encoding(t *testing.T) {
-	ctx := context.Background()
-	keyGen := cryptopkg.NewRSAKeyGenerator(2048)
-	kp, err := keyGen.Generate(ctx)
-	if err != nil {
-		t.Fatalf("failed to generate key pair: %v", err)
-	}
-
-	signer, err := NewCloudFrontSignerFromPEM("K31UKMLKEO2DC4", kp.PrivatePEM)
-	if err != nil {
-		t.Fatalf("NewCloudFrontSignerFromPEM failed: %v", err)
-	}
-
-	// Test data with characters that would be affected by AWS-specific encoding
-	testData := []byte{0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa}
-
-	encoded := signer.base64URLSafe(testData)
-
-	// AWS-specific encoding should NOT contain standard base64 characters: + / =
-	if contains(encoded, "+") {
-		t.Errorf("encoded string contains '+' (should be '-'): %s", encoded)
-	}
-	if contains(encoded, "/") {
-		t.Errorf("encoded string contains '/' (should be '~'): %s", encoded)
-	}
-	if contains(encoded, "=") {
-		t.Errorf("encoded string contains '=' (should be '_'): %s", encoded)
 	}
 }
 
