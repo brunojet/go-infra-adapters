@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/brunojet/go-infra-adapters/v4/internal/http_client/net_http"
+	middlemw "github.com/brunojet/go-infra-adapters/v4/internal/middleware/net_http_client"
 	"github.com/brunojet/go-infra-adapters/v4/pkg/http_client/contracts"
 )
 
@@ -93,4 +94,29 @@ func WithIdleConnTimeout(timeout time.Duration) HttpClientOption {
 // Complexity: O(1). Memory: ~16 bytes.
 func WithDialContext(timeout, keepAlive time.Duration) HttpClientOption {
 	return net_http.WithDialContext(timeout, keepAlive)
+}
+
+// WithCircuitBreakerMaxFailures enables circuit breaker and sets max consecutive failures.
+// Circuit breaker is disabled by default. Complexity: O(1). Memory: ~4 bytes.
+func WithCircuitBreakerMaxFailures(n int) HttpClientOption {
+	return net_http.WithCircuitBreakerMaxFailures(n)
+}
+
+// WithCircuitBreakerResetTimeout enables circuit breaker and sets reset timeout (half-open state).
+// Complexity: O(1). Memory: ~8 bytes.
+func WithCircuitBreakerResetTimeout(d time.Duration) HttpClientOption {
+	return net_http.WithCircuitBreakerResetTimeout(d)
+}
+
+// WithCircuitBreakerHalfOpenRequests enables circuit breaker and sets probe requests in half-open state.
+// Complexity: O(1). Memory: ~4 bytes.
+func WithCircuitBreakerHalfOpenRequests(n int) HttpClientOption {
+	return net_http.WithCircuitBreakerHalfOpenRequests(n)
+}
+
+// WithCircuitBreakerFailureClassifier enables circuit breaker with custom error classifier.
+// FailureClassifier determines which errors should increment the circuit breaker counter.
+// Complexity: O(1). Memory: ~8-16 bytes (ref).
+func WithCircuitBreakerFailureClassifier(fc middlemw.FailureClassifier) HttpClientOption {
+	return net_http.WithCircuitBreakerFailureClassifier(fc)
 }
