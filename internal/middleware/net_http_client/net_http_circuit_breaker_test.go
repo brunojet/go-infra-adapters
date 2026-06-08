@@ -134,3 +134,64 @@ func TestNewBreakerMiddleware_ReadyToTrip(t *testing.T) {
 	}
 	require.Error(t, err)
 }
+
+// TestBreakerRoundTripper_Returns5xxResponseIntact validates that the circuit breaker
+// increments internally but always returns the response body to the caller, never masking it.
+// This is critical: if a 5xx response comes back, the caller MUST receive it to handle errors.
+func TestBreakerRoundTripper_Returns5xxResponseIntact(t *testing.T) {
+	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "5xx-test", MaxRequests: 1})
+	bodyContent := "Internal Server Error details"
+	inner := &errRT{
+		resp: &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(strings.NewReader(bodyContent)),
+			Header:     make(http.Header),
+		},
+		err: nil, // No network error, just bad status code
+	}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
+
+	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
+
+	// Circuit breaker MUST return response intacta
+	require.NotNil(t, resp, "response should not be nil even with 5xx")
+	require.Nil(t, err, "error should be nil when response exists")
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	// Body must be readable by caller
+	body, readErr := io.ReadAll(resp.Body)
+	require.NoError(t, readErr)
+	assert.Equal(t, bodyContent, string(body))
+
+	_ = resp.Body.Close()
+}
+
+// TestBreakerRoundTripper_Returns429ResponseIntact validates that 429 rate limiting
+// responses are returned intacta with body, not masked.
+func TestBreakerRoundTripper_Returns429ResponseIntact(t *testing.T) {
+	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "429-test", MaxRequests: 1})
+	bodyContent := "Rate limit exceeded"
+	inner := &errRT{
+		resp: &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       io.NopCloser(strings.NewReader(bodyContent)),
+			Header:     make(http.Header),
+		},
+		err: nil,
+	}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
+
+	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
+
+	// Circuit breaker MUST return response
+	require.NotNil(t, resp, "response should not be nil even with 429")
+	require.Nil(t, err, "error should be nil when response exists")
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+
+	// Body must be readable
+	body, readErr := io.ReadAll(resp.Body)
+	require.NoError(t, readErr)
+	assert.Equal(t, bodyContent, string(body))
+
+	_ = resp.Body.Close()
+}
