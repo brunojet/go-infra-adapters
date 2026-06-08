@@ -258,8 +258,8 @@ func WithCircuitBreakerFailureClassifier(fc middlmw.FailureClassifier) HttpClien
 
 // buildFinalRoundTripper composes RoundTripper middlewares.
 //
-// Wrapping order (code):      baseRT → customMWs → circuitBreaker → headerControl → observability
-// Execution order (request):  observability → headerControl → circuitBreaker → customMWs → baseRT
+// Wrapping order (code):      baseRT → CB → customMWs → headerControl → observability
+// Execution order (request):  observability → headerControl → customMWs → CB → baseRT
 //
 // Note: Last wrapped = First executed! Middlewares wrap each other like onions.
 //
@@ -267,36 +267,36 @@ func WithCircuitBreakerFailureClassifier(fc middlmw.FailureClassifier) HttpClien
 //  1. ObservabilityMiddleware (outermost) - OTEL tracing, metrics (optional)
 //     ↓ Sees original request, logs/traces everything
 //  2. HeaderControl - sanitizes sensitive headers (Authorization, Cookie, etc)
-//     ↓ Always active, removes dangerous headers BEFORE circuit breaker
-//     ↓ Security baseline: ensures CB doesn't accidentally leak credentials
-//  3. CircuitBreaker - protects backend from overload (optional, disabled by default)
-//     ↓ Monitors server failures and opens circuit when degraded
-//     ↓ Works with sanitized headers
-//  4. CustomMiddlewares - retry, custom logic (optional)
+//     ↓ Always active, removes dangerous headers BEFORE custom logic
+//     ↓ Security baseline: ensures custom MW doesn't accidentally leak credentials
+//  3. CustomMiddlewares - retry, custom logic (optional)
 //     ↓ Works with sanitized headers (safe to implement custom logic)
+//     ↓ Executes before CB so retry can work effectively
+//  4. CircuitBreaker - protects backend from overload (optional, disabled by default)
+//     ↓ Monitors server failures and opens circuit when degraded
+//     ↓ Close to network layer for accurate failure detection
 //  5. BaseRoundTripper - sends request to server
 func (cfg *httpClientConfig) buildFinalRoundTripper() http.RoundTripper {
 	// Wrap 1: BaseRoundTripper (innermost - executes last)
 	finalRT := cfg.roundTripper
 
-	// Wrap 2: CircuitBreaker (executes 3rd - BEFORE custom middlewares)
+	// Wrap 2: CircuitBreaker (protects the network layer)
 	// Optional: protects backend from cascading failures
 	// Monitors server errors and opens circuit when degraded
-
 	if len(cfg.circuitBreakerOpts) > 0 {
 		finalRT = middlmw.NewBreakerMiddleware(finalRT, cfg.circuitBreakerOpts...)
 	}
 
-	// Wrap 3: CustomMiddlewares (execute 2nd-to-last)
+	// Wrap 3: CustomMiddlewares (executes before CB)
 	// Retry, custom logic - work with sanitized headers
-	// These are developer-controlled, but protected by HeaderControl below
+	// Positioned before CB so retry logic can work effectively
 	for _, mw := range cfg.customMiddlewares {
 		finalRT = mw(finalRT)
 	}
 
-	// Wrap 4: HeaderControl (executes 4th - BEFORE custom middlewares and CB)
+	// Wrap 4: HeaderControl (security baseline)
 	// Sanitizes headers before downstream processing
-	// Ensures even buggy custom middleware or CB can't leak Authorization/Cookie
+	// Ensures even buggy custom middleware can't leak Authorization/Cookie
 	finalRT = middlmw.NewHeaderControlMiddleware(
 		finalRT,
 		middlmw.WithLogger(cfg.logger),
