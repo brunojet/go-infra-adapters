@@ -16,17 +16,11 @@ import (
 type MiddlewareFunc func(http.RoundTripper) http.RoundTripper
 
 type httpClientConfig struct {
-	baseURL           string
-	roundTripper      http.RoundTripper
-	observabilityMw   MiddlewareFunc   // Observability (OTEL, tracing)
-	customMiddlewares []MiddlewareFunc // Custom app-specific middlewares
-
-	// Circuit Breaker (disabled by default)
-	circuitBreakerEnabled bool
-	cbMaxFailures         int
-	cbResetTimeout        time.Duration
-	cbHalfOpenRequests    int
-	cbFailureClassifier   middlmw.FailureClassifier
+	baseURL            string
+	roundTripper       http.RoundTripper
+	observabilityMw    MiddlewareFunc          // Observability (OTEL, tracing)
+	customMiddlewares  []MiddlewareFunc        // Custom app-specific middlewares
+	circuitBreakerOpts []middlmw.BreakerOption // Circuit breaker middleware (optional)
 
 	timeout time.Duration
 	headers http.Header
@@ -44,11 +38,7 @@ func defaultHttpClientConfig() httpClientConfig {
 		customMiddlewares: make([]MiddlewareFunc, 0),
 
 		// Circuit breaker defaults (disabled by default)
-		circuitBreakerEnabled: false,
-		cbMaxFailures:         5,
-		cbResetTimeout:        10 * time.Second,
-		cbHalfOpenRequests:    3,
-		cbFailureClassifier:   nil,
+		circuitBreakerOpts: make([]middlmw.BreakerOption, 0),
 
 		timeout: 0, // 0 means no timeout (stdlib default)
 		headers: make(http.Header),
@@ -241,44 +231,28 @@ func WithDialContext(timeout, keepAlive time.Duration) HttpClientOption {
 // WithCircuitBreakerMaxFailures enables circuit breaker and sets max consecutive failures before opening.
 func WithCircuitBreakerMaxFailures(n int) HttpClientOption {
 	return func(c *httpClientConfig) {
-		if n <= 0 {
-			panic("http client: circuit breaker max failures must be > 0")
-		}
-		c.circuitBreakerEnabled = true
-		c.cbMaxFailures = n
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerMaxFailures(n))
 	}
 }
 
 // WithCircuitBreakerResetTimeout enables circuit breaker and sets reset timeout (half-open state).
 func WithCircuitBreakerResetTimeout(d time.Duration) HttpClientOption {
 	return func(c *httpClientConfig) {
-		if d <= 0 {
-			panic("http client: circuit breaker reset timeout must be > 0")
-		}
-		c.circuitBreakerEnabled = true
-		c.cbResetTimeout = d
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerResetTimeout(d))
 	}
 }
 
 // WithCircuitBreakerHalfOpenRequests enables circuit breaker and sets probe requests in half-open state.
 func WithCircuitBreakerHalfOpenRequests(n int) HttpClientOption {
 	return func(c *httpClientConfig) {
-		if n < 0 {
-			panic("http client: circuit breaker half-open requests cannot be negative")
-		}
-		c.circuitBreakerEnabled = true
-		c.cbHalfOpenRequests = n
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerHalfOpenRequests(n))
 	}
 }
 
 // WithCircuitBreakerFailureClassifier enables circuit breaker with custom error classifier.
 func WithCircuitBreakerFailureClassifier(fc middlmw.FailureClassifier) HttpClientOption {
 	return func(c *httpClientConfig) {
-		if fc == nil {
-			panic("http client: circuit breaker failure classifier cannot be nil")
-		}
-		c.circuitBreakerEnabled = true
-		c.cbFailureClassifier = fc
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithFailureClassifier(fc))
 	}
 }
 
@@ -305,26 +279,19 @@ func (cfg *httpClientConfig) buildFinalRoundTripper() http.RoundTripper {
 	// Wrap 1: BaseRoundTripper (innermost - executes last)
 	finalRT := cfg.roundTripper
 
-	// Wrap 2: CustomMiddlewares (execute 2nd-to-last)
+	// Wrap 2: CircuitBreaker (executes 3rd - BEFORE custom middlewares)
+	// Optional: protects backend from cascading failures
+	// Monitors server errors and opens circuit when degraded
+
+	if len(cfg.circuitBreakerOpts) > 0 {
+		finalRT = middlmw.NewBreakerMiddleware(finalRT, cfg.circuitBreakerOpts...)
+	}
+
+	// Wrap 3: CustomMiddlewares (execute 2nd-to-last)
 	// Retry, custom logic - work with sanitized headers
 	// These are developer-controlled, but protected by HeaderControl below
 	for _, mw := range cfg.customMiddlewares {
 		finalRT = mw(finalRT)
-	}
-
-	// Wrap 3: CircuitBreaker (executes 3rd - BEFORE custom middlewares)
-	// Optional: protects backend from cascading failures
-	// Monitors server errors and opens circuit when degraded
-	if cfg.circuitBreakerEnabled {
-		cbOpts := []middlmw.BreakerOption{
-			middlmw.WithCircuitBreakerMaxFailures(cfg.cbMaxFailures),
-			middlmw.WithCircuitBreakerResetTimeout(cfg.cbResetTimeout),
-			middlmw.WithCircuitBreakerHalfOpenRequests(cfg.cbHalfOpenRequests),
-		}
-		if cfg.cbFailureClassifier != nil {
-			cbOpts = append(cbOpts, middlmw.WithFailureClassifier(cfg.cbFailureClassifier))
-		}
-		finalRT = middlmw.NewBreakerMiddleware(finalRT, cbOpts...)
 	}
 
 	// Wrap 4: HeaderControl (executes 4th - BEFORE custom middlewares and CB)
