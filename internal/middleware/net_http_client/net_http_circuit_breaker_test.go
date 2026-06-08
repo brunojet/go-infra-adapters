@@ -29,7 +29,7 @@ func (d *dummyRT) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestBreakerRoundTripper_NextNil_Panics(t *testing.T) {
-	br := &breakerRoundTripper{next: nil, cb: nil}
+	br := &breakerRoundTripper{next: nil, cb: nil, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil && resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -41,7 +41,7 @@ func TestBreakerRoundTripper_NextNil_Panics(t *testing.T) {
 
 func TestBreakerRoundTripper_DelegatesWhenCBNil(t *testing.T) {
 	d := &dummyRT{}
-	br := &breakerRoundTripper{next: d, cb: nil}
+	br := &breakerRoundTripper{next: d, cb: nil, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/ok", nil))
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -54,7 +54,7 @@ func TestBreakerRoundTripper_DelegatesWhenCBNil(t *testing.T) {
 func TestBreakerRoundTripper_WithCB_ExecutesAndReturnsResponse(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "test", Timeout: time.Second, MaxRequests: 1})
 	d := &dummyRT{}
-	br := &breakerRoundTripper{next: d, cb: cb}
+	br := &breakerRoundTripper{next: d, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/cb", nil))
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -92,7 +92,7 @@ func (e *errRT) RoundTrip(*http.Request) (*http.Response, error) { return e.resp
 func TestBreakerRoundTripper_WithCB_PropagatesError(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "err-test", MaxRequests: 1})
 	inner := &errRT{resp: nil, err: errors.New("transport error")}
-	br := &breakerRoundTripper{next: inner, cb: cb}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -109,7 +109,7 @@ func TestBreakerRoundTripper_WithCB_ClosesBodyOnErrorWithResponse(t *testing.T) 
 		resp: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("body"))},
 		err:  errors.New("transport error with body"),
 	}
-	br := &breakerRoundTripper{next: inner, cb: cb}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil {
 		defer func() { _ = resp.Body.Close() }()

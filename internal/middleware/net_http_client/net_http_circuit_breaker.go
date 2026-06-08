@@ -11,8 +11,9 @@ import (
 // under a circuit breaker. When the breaker is nil it delegates directly to
 // the next RoundTripper.
 type breakerRoundTripper struct {
-	next http.RoundTripper
-	cb   *gobreaker.CircuitBreaker
+	next              http.RoundTripper
+	cb                *gobreaker.CircuitBreaker
+	failureClassifier FailureClassifier
 }
 
 // NewBreakerMiddleware returns a middleware builder: a function that accepts
@@ -50,7 +51,22 @@ func NewBreakerMiddleware(base http.RoundTripper, opts ...BreakerOption) http.Ro
 			return failureRate >= 0.5
 		},
 	}
-	return &breakerRoundTripper{next: base, cb: gobreaker.NewCircuitBreaker(settings)}
+	classifier := cfg.FailureClassifier
+	if classifier == nil {
+		classifier = &DefaultFailureClassifier{}
+	}
+
+	return &breakerRoundTripper{
+		next:              base,
+		cb:                gobreaker.NewCircuitBreaker(settings),
+		failureClassifier: classifier,
+	}
+}
+
+func closeResponseBody(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 }
 
 func (b *breakerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -61,19 +77,25 @@ func (b *breakerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return b.next.RoundTrip(req)
 	}
 
-	var resp *http.Response
-	_, err := b.cb.Execute(func() (any, error) {
-		r, err := b.next.RoundTrip(req)
-		if err != nil {
-			// ensure we don't leak a body when a RoundTrip returns both
-			// a response and an error (defensive)
-			if r != nil && r.Body != nil {
-				_ = r.Body.Close()
-			}
-			return nil, err
+	respVal, err := b.cb.Execute(func() (any, error) {
+		r, reqErr := b.next.RoundTrip(req)
+
+		if reqErr != nil {
+			closeResponseBody(r)
+			return nil, reqErr
 		}
-		resp = r
-		return resp, nil
+
+		// Classify response for circuit breaker tracking but never mask it
+		cbErr := b.failureClassifier.ClassifyError(r)
+		// Return response as any, use cbErr only to signal CB increment
+		return r, cbErr
 	})
-	return resp, err
+
+	// Response comes as any, error is only for CB tracking
+	if resp, ok := respVal.(*http.Response); ok {
+		return resp, nil
+	}
+
+	// No response, only error from request
+	return nil, err
 }

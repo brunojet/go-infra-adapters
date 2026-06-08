@@ -7,9 +7,10 @@ import (
 // circuitBreakerConfig configures the circuit breaker used by the
 // Breaker middleware.
 type circuitBreakerConfig struct {
-	MaxFailures      int           // consecutive failures before opening
-	ResetTimeout     time.Duration // how long to wait before transitioning to half-open
-	HalfOpenRequests int           // probe requests allowed in half-open state
+	MaxFailures       int               // consecutive failures before opening
+	ResetTimeout      time.Duration     // how long to wait before transitioning to half-open
+	HalfOpenRequests  int               // probe requests allowed in half-open state
+	FailureClassifier FailureClassifier // error classification for circuit breaker increments
 }
 
 // BreakerOption configures a CircuitBreakerConfig.
@@ -58,5 +59,14 @@ func WithCircuitBreakerHalfOpenRequests(n int) BreakerOption {
 			panic("half-open requests cannot be negative")
 		}
 		c.HalfOpenRequests = n
+	}
+}
+
+// WithFailureClassifier sets a custom error classifier for the circuit breaker.
+func WithFailureClassifier(classifier FailureClassifier) BreakerOption {
+	return func(c *circuitBreakerConfig) {
+		if classifier != nil {
+			c.FailureClassifier = classifier
+		}
 	}
 }
