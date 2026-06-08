@@ -19,8 +19,19 @@ type BreakerOption func(cfg *circuitBreakerConfig)
 
 // newCircuitBreakerConfig builds a CircuitBreakerConfig applying provided
 // functional options.
+//
+// Defaults (conservative, suitable for production HTTP clients):
+// - MaxFailures: 5 consecutive failures before opening
+// - ResetTimeout: 30s before transitioning to half-open
+// - HalfOpenRequests: 1 probe request allowed in half-open state
+// - FailureClassifier: DefaultFailureClassifier (5xx, 429, network errors)
 func newCircuitBreakerConfig(opts ...BreakerOption) circuitBreakerConfig {
-	cfg := circuitBreakerConfig{}
+	cfg := circuitBreakerConfig{
+		MaxFailures:      5,
+		ResetTimeout:     30 * time.Second,
+		HalfOpenRequests: 1,
+		// FailureClassifier is nil initially, will default to DefaultFailureClassifier in NewBreakerMiddleware
+	}
 	for _, o := range opts {
 		if o == nil {
 			continue
