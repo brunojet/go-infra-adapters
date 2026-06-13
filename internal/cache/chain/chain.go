@@ -1,4 +1,4 @@
-// Package chain provides a composable multi-layer cache orchestrator.
+// Package chain provides a composable multi-layer cache orchestrator (internal).
 // ChainedCache coordinates Get, Set, and GetOrSet across multiple Cache[T]
 // layers (local, Valkey, origin) with transparent warmup and deduplication.
 package chain
@@ -21,6 +21,23 @@ type Layer[T any] struct {
 	TTL   time.Duration       // Default TTL for this layer (0 = no expiry)
 }
 
+// ChainedCacheOption configures a ChainedCache. Use With* functions to create options.
+type ChainedCacheOption func(*chainConfig)
+
+type chainConfig struct {
+	logger pkglogger.Logger
+}
+
+// WithLogger configures a structured logger. Panics if logger is nil.
+func WithLogger(l pkglogger.Logger) ChainedCacheOption {
+	if l == nil {
+		panic("logger cannot be nil, use no option to default to noop logger")
+	}
+	return func(cfg *chainConfig) {
+		cfg.logger = l
+	}
+}
+
 // ChainedCache orchestrates multiple cache layers as a transparent stack.
 // Get/Set/Delete/Exists pass through to all layers. GetOrSet implements
 // cache-aside with concurrent deduplication and automatic layer population.
@@ -30,23 +47,21 @@ type ChainedCache[T any] struct {
 	logger pkglogger.Logger
 }
 
-// Config configures a ChainedCache.
-type Config struct {
-	Logger pkglogger.Logger
-}
-
 // NewChainedCache constructs a chain from layers (order matters: fastest first).
 // Panics if layers is empty.
-func NewChainedCache[T any](cfg Config, layers ...Layer[T]) *ChainedCache[T] {
+func NewChainedCache[T any](layers []Layer[T], opts ...ChainedCacheOption) *ChainedCache[T] {
 	if len(layers) == 0 {
 		panic("ChainedCache requires at least one layer")
 	}
-	if cfg.Logger == nil {
-		cfg.Logger = logger.Default()
+	cfg := &chainConfig{logger: logger.Default()}  // noop default
+	for _, opt := range opts {
+		if opt != nil {
+			opt(cfg)
+		}
 	}
 	return &ChainedCache[T]{
 		layers: sliceLayers(layers),
-		logger: cfg.Logger,
+		logger: cfg.logger,
 	}
 }
 
@@ -74,18 +89,7 @@ func (cc *ChainedCache[T]) Get(ctx context.Context, key string) (*T, bool, error
 // but not propagated (cache is an optimization, not critical path).
 func (cc *ChainedCache[T]) Set(ctx context.Context, key string, val *T, ttl time.Duration) error {
 	for _, layer := range cc.layers {
-		layer := layer
-		go func() {
-			ttlForLayer := layer.TTL
-			if ttlForLayer == 0 {
-				ttlForLayer = ttl
-			}
-			if err := layer.Cache.Set(ctx, key, val, ttlForLayer); err != nil {
-				cc.logger.Warn(ctx, "cache layer set failed",
-					pkglogger.String("layer", layer.Name),
-					pkglogger.Error("err", err))
-			}
-		}()
+		cc.setAsync(ctx, layer, key, val, ttl)
 	}
 	return nil
 }
@@ -93,14 +97,7 @@ func (cc *ChainedCache[T]) Set(ctx context.Context, key string, val *T, ttl time
 // Delete removes key from all layers (best-effort, async).
 func (cc *ChainedCache[T]) Delete(ctx context.Context, key string) error {
 	for _, layer := range cc.layers {
-		layer := layer
-		go func() {
-			if err := layer.Cache.Delete(ctx, key); err != nil {
-				cc.logger.Warn(ctx, "cache layer delete failed",
-					pkglogger.String("layer", layer.Name),
-					pkglogger.Error("err", err))
-			}
-		}()
+		cc.deleteAsync(ctx, layer, key)
 	}
 	return nil
 }
@@ -186,15 +183,7 @@ func (cc *ChainedCache[T]) HealthCheck(ctx context.Context) error {
 // warmupPriorsAt populates layers 0..beforeLayer-1 with val (triggered by a hit in beforeLayer).
 func (cc *ChainedCache[T]) warmupPriorsAt(ctx context.Context, key string, val *T, beforeLayer int) {
 	for i := 0; i < beforeLayer; i++ {
-		i := i
-		go func() {
-			layer := cc.layers[i]
-			if err := layer.Cache.Set(ctx, key, val, layer.TTL); err != nil {
-				cc.logger.Warn(ctx, "cache warmup failed",
-					pkglogger.String("layer", layer.Name),
-					pkglogger.Error("err", err))
-			}
-		}()
+		cc.setAsync(ctx, cc.layers[i], key, val, cc.layers[i].TTL)
 	}
 }
 
@@ -206,19 +195,38 @@ func (cc *ChainedCache[T]) populateLayers(
 	defaultTTL time.Duration,
 ) {
 	for _, layer := range cc.layers {
-		layer := layer
-		go func() {
-			ttl := layer.TTL
-			if ttl == 0 {
-				ttl = defaultTTL
-			}
-			if err := layer.Cache.Set(ctx, key, val, ttl); err != nil {
-				cc.logger.Warn(ctx, "cache layer set failed during populate",
-					pkglogger.String("layer", layer.Name),
-					pkglogger.Error("err", err))
-			}
-		}()
+		cc.setAsync(ctx, layer, key, val, resolveTTL(layer.TTL, defaultTTL))
 	}
+}
+
+// setAsync writes to a single layer asynchronously. Errors are logged but not propagated.
+func (cc *ChainedCache[T]) setAsync(ctx context.Context, layer *Layer[T], key string, val *T, ttl time.Duration) {
+	go func() {
+		if err := layer.Cache.Set(ctx, key, val, ttl); err != nil {
+			cc.logger.Warn(ctx, "cache layer set failed",
+				pkglogger.String("layer", layer.Name),
+				pkglogger.Error("err", err))
+		}
+	}()
+}
+
+// deleteAsync removes from a single layer asynchronously. Errors are logged.
+func (cc *ChainedCache[T]) deleteAsync(ctx context.Context, layer *Layer[T], key string) {
+	go func() {
+		if err := layer.Cache.Delete(ctx, key); err != nil {
+			cc.logger.Warn(ctx, "cache layer delete failed",
+				pkglogger.String("layer", layer.Name),
+				pkglogger.Error("err", err))
+		}
+	}()
+}
+
+// resolveTTL returns layer TTL if set, otherwise falls back to default.
+func resolveTTL(layerTTL, defaultTTL time.Duration) time.Duration {
+	if layerTTL == 0 {
+		return defaultTTL
+	}
+	return layerTTL
 }
 
 // Helper to convert []Layer to []*Layer

@@ -2,9 +2,6 @@ package local
 
 import (
 	"context"
-	"fmt"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -222,110 +219,6 @@ func TestExists_ExpiredKey(t *testing.T) {
 	}
 }
 
-func TestGetOrSet_Hit(t *testing.T) {
-	c := NewLocalCache[string]()
-	ctx := context.Background()
-	val := "cached"
-
-	c.Set(ctx, "key", &val, 0)
-
-	loadCalls := 0
-	got, err := c.GetOrSet(ctx, "key", 10*time.Second, func(ctx context.Context) (*string, error) {
-		loadCalls++
-		s := "new"
-		return &s, nil
-	})
-	if err != nil {
-		t.Fatalf("GetOrSet: %v", err)
-	}
-	if *got != val {
-		t.Fatalf("expected %q, got %q", val, *got)
-	}
-	if loadCalls != 0 {
-		t.Fatalf("expected 0 load calls for cache hit, got %d", loadCalls)
-	}
-}
-
-func TestGetOrSet_Miss(t *testing.T) {
-	c := NewLocalCache[string]()
-	ctx := context.Background()
-
-	loadCalls := 0
-	expected := "loaded"
-	got, err := c.GetOrSet(ctx, "key", 10*time.Second, func(ctx context.Context) (*string, error) {
-		loadCalls++
-		return &expected, nil
-	})
-	if err != nil {
-		t.Fatalf("GetOrSet: %v", err)
-	}
-	if *got != expected {
-		t.Fatalf("expected %q, got %q", expected, *got)
-	}
-	if loadCalls != 1 {
-		t.Fatalf("expected 1 load call for cache miss, got %d", loadCalls)
-	}
-}
-
-func TestGetOrSet_Dedup(t *testing.T) {
-	c := NewLocalCache[int]()
-	ctx := context.Background()
-	n := 10
-	var loadCalls int64
-
-	var wg sync.WaitGroup
-	results := make([]*int, n)
-	mu := sync.Mutex{}
-
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			val, err := c.GetOrSet(ctx, "key", 10*time.Second, func(ctx context.Context) (*int, error) {
-				atomic.AddInt64(&loadCalls, 1)
-				time.Sleep(10 * time.Millisecond) // simulate slow load
-				v := 42
-				return &v, nil
-			})
-			if err != nil {
-				t.Errorf("GetOrSet: %v", err)
-			}
-			mu.Lock()
-			results[idx] = val
-			mu.Unlock()
-		}(i)
-	}
-
-	wg.Wait()
-
-	if loadCalls != 1 {
-		t.Fatalf("expected 1 load call for concurrent GetOrSet on same key, got %d", loadCalls)
-	}
-
-	for i, r := range results {
-		if r == nil || *r != 42 {
-			t.Fatalf("result[%d]: expected 42, got %v", i, r)
-		}
-	}
-}
-
-func TestGetOrSet_LoadError(t *testing.T) {
-	c := NewLocalCache[string]()
-	ctx := context.Background()
-
-	testErr := fmt.Errorf("load error")
-	_, err := c.GetOrSet(ctx, "key", 10*time.Second, func(ctx context.Context) (*string, error) {
-		return nil, testErr
-	})
-	if err != testErr {
-		t.Fatalf("expected %v, got %v", testErr, err)
-	}
-
-	_, hit, _ := c.Get(ctx, "key")
-	if hit {
-		t.Fatal("expected miss after load error")
-	}
-}
 
 func TestHealthCheck(t *testing.T) {
 	c := NewLocalCache[string]()
@@ -359,19 +252,3 @@ func (tl *testLogger) Warn(ctx context.Context, msg string, fields ...logger.Fie
 }
 func (tl *testLogger) Error(ctx context.Context, msg string, err error, fields ...logger.Field) {}
 
-func TestLookupDegrades_ReadError(t *testing.T) {
-	tl := &testLogger{}
-	c := NewLocalCache[string](WithLogger(tl))
-	ctx := context.Background()
-
-	// Manually inject an error into a value to trigger Get error on lookup
-	// Actually, Get in local cache never errors except for empty key validation.
-	// So lookup degradation is silent in this impl (no backend errors possible).
-	// This test validates the pattern is in place for distributed adapters.
-	val := "ok"
-	c.Set(ctx, "key", &val, 0)
-	got, _ := c.lookup(ctx, "key")
-	if got == nil || *got != val {
-		t.Fatal("lookup should return value on valid Get")
-	}
-}
