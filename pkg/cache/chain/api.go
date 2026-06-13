@@ -11,26 +11,32 @@ import (
 // Layer represents one cache tier in the chain (exported from internal).
 type Layer[T any] = internalchain.Layer[T]
 
-// Option configures a ChainedCache. Use With* functions to create options.
-type Option = internalchain.ChainedCacheOption
+// Option[T] configures a ChainedCache. Use With* functions to create options.
+type Option[T any] = internalchain.ChainedCacheOption[T]
+
+// WithLayers adds one or more cache layers to the chain (order matters: fastest first).
+// Each Layer specifies its own TTL; 0 means no expiry. Can be called multiple times
+// to add layers incrementally.
+func WithLayers[T any](layers ...Layer[T]) Option[T] { return internalchain.WithLayers(layers...) }
 
 // WithLogger configures a structured logger. Panics if logger is nil.
 // Omit this option to use the noop default logger.
-func WithLogger(l logger.Logger) Option { return internalchain.WithLogger(l) }
+func WithLogger[T any](l logger.Logger) Option[T] { return internalchain.WithLogger[T](l) }
 
-// NewChainedCache constructs a chain from layers (order matters: fastest first).
-// Panics if layers is empty or if any With* option panics.
+// NewChainedCache constructs a chain from layers and options.
+// Panics if no layers were added via WithLayers options.
+// Order matters: fastest layer first (local before Valkey before origin).
 //
 // Example:
 //
-//	chain := chain.NewChainedCache(
-//		[]chain.Layer[User]{
-//			{Name: "local", Cache: localCache, TTL: 5*time.Minute},
-//			{Name: "valkey", Cache: valkeyCache, TTL: 1*time.Hour},
-//		},
-//		chain.WithLogger(logger),
+//	cache := chain.NewChainedCache[User](
+//	    chain.WithLayers(
+//	        chain.Layer[User]{Cache: localCache, TTL: 5*time.Minute},
+//	        chain.Layer[User]{Cache: valkeyCache, TTL: 1*time.Hour},
+//	    ),
+//	    chain.WithLogger[User](logger),
 //	)
-//	user, err := chain.GetOrSet(ctx, "user:123", 5*time.Minute, loadFromDB)
-func NewChainedCache[T any](layers []Layer[T], opts ...Option) contracts.Cache[T] {
-	return internalchain.NewChainedCache[T](layers, opts...)
+//	user, err := cache.GetOrSet(ctx, "user:123", 5*time.Minute, loadFromDB)
+func NewChainedCache[T any](opts ...Option[T]) contracts.Cache[T] {
+	return internalchain.NewChainedCache[T](opts...)
 }

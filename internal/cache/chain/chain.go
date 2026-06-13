@@ -21,20 +21,32 @@ type Layer[T any] struct {
 	TTL   time.Duration       // Default TTL for this layer (0 = no expiry)
 }
 
-// ChainedCacheOption configures a ChainedCache. Use With* functions to create options.
-type ChainedCacheOption func(*chainConfig)
+// ChainedCacheOption[T] configures a ChainedCache. Use With* functions to create options.
+type ChainedCacheOption[T any] func(*chainBuilder[T])
 
-type chainConfig struct {
+type chainBuilder[T any] struct {
+	layers []*Layer[T]
 	logger pkglogger.Logger
 }
 
+// WithLayers adds one or more cache layers to the chain (order matters: fastest first).
+// Each Layer specifies its own TTL; 0 means no expiry. Can be called multiple times
+// to add layers incrementally.
+func WithLayers[T any](layers ...Layer[T]) ChainedCacheOption[T] {
+	return func(cb *chainBuilder[T]) {
+		for i := range layers {
+			cb.layers = append(cb.layers, &layers[i])
+		}
+	}
+}
+
 // WithLogger configures a structured logger. Panics if logger is nil.
-func WithLogger(l pkglogger.Logger) ChainedCacheOption {
+func WithLogger[T any](l pkglogger.Logger) ChainedCacheOption[T] {
 	if l == nil {
 		panic("logger cannot be nil, use no option to default to noop logger")
 	}
-	return func(cfg *chainConfig) {
-		cfg.logger = l
+	return func(cb *chainBuilder[T]) {
+		cb.logger = l
 	}
 }
 
@@ -47,21 +59,33 @@ type ChainedCache[T any] struct {
 	logger pkglogger.Logger
 }
 
-// NewChainedCache constructs a chain from layers (order matters: fastest first).
-// Panics if layers is empty.
-func NewChainedCache[T any](layers []Layer[T], opts ...ChainedCacheOption) *ChainedCache[T] {
-	if len(layers) == 0 {
-		panic("ChainedCache requires at least one layer")
-	}
-	cfg := &chainConfig{logger: logger.Default()}  // noop default
+// NewChainedCache constructs a chain from layers and options.
+// Panics if no layers were added via WithLayers options.
+// Order matters: fastest layer first (local before Valkey before origin).
+//
+// Example:
+//
+//	cache := NewChainedCache[User](
+//	    WithLayers(
+//	        Layer[User]{Cache: local, TTL: 5*time.Minute},
+//	        Layer[User]{Cache: valkey, TTL: 1*time.Hour},
+//	    ),
+//	    WithLogger(logger),
+//	)
+func NewChainedCache[T any](opts ...ChainedCacheOption[T]) *ChainedCache[T] {
+	cb := &chainBuilder[T]{layers: make([]*Layer[T], 0), logger: logger.Default()}
 	for _, opt := range opts {
 		if opt != nil {
-			opt(cfg)
+			opt(cb)
 		}
 	}
+	if len(cb.layers) == 0 {
+		panic("ChainedCache requires at least one layer via WithLayers option")
+	}
+
 	return &ChainedCache[T]{
-		layers: sliceLayers(layers),
-		logger: cfg.logger,
+		layers: cb.layers,
+		logger: cb.logger,
 	}
 }
 
@@ -85,11 +109,17 @@ func (cc *ChainedCache[T]) Get(ctx context.Context, key string) (*T, bool, error
 	return nil, false, nil
 }
 
-// Set writes to all layers asynchronously (best-effort). Errors are logged
-// but not propagated (cache is an optimization, not critical path).
+// Set writes to all layers synchronously (best-effort). Each layer uses its own
+// configured TTL, falling back to the provided ttl. Errors are logged but not
+// propagated (cache is an optimization, not critical path).
 func (cc *ChainedCache[T]) Set(ctx context.Context, key string, val *T, ttl time.Duration) error {
 	for _, layer := range cc.layers {
-		cc.setAsync(ctx, layer, key, val, ttl)
+		layerTTL := resolveTTL(layer.TTL, ttl)
+		if err := layer.Cache.Set(ctx, key, val, layerTTL); err != nil {
+			cc.logger.Warn(ctx, "cache layer set failed",
+				pkglogger.String("layer", layer.Name),
+				pkglogger.Error("err", err))
+		}
 	}
 	return nil
 }

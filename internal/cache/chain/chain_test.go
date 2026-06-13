@@ -74,9 +74,9 @@ func TestGetOrSet_Hit(t *testing.T) {
 	tier1.Set(context.Background(), "key", &cached, 0)
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1},
+		),
 	)
 
 	var loadCalls int
@@ -101,10 +101,10 @@ func TestGetOrSet_Miss_SingleLoad(t *testing.T) {
 	tier2 := newMockCache[string]()
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
-			{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
+			Layer[string]{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
+		),
 	)
 
 	var loadCalls int
@@ -139,9 +139,9 @@ func TestGetOrSet_Miss_SingleLoad(t *testing.T) {
 func TestGetOrSet_Dedup(t *testing.T) {
 	tier1 := newMockCache[int]()
 	chain := NewChainedCache[int](
-		[]Layer[int]{
-			{Name: "tier1", Cache: tier1},
-		},
+		WithLayers(
+			Layer[int]{Name: "tier1", Cache: tier1},
+		),
 	)
 
 	n := 10
@@ -185,9 +185,9 @@ func TestGetOrSet_Dedup(t *testing.T) {
 func TestGetOrSet_LoadError(t *testing.T) {
 	tier1 := newMockCache[string]()
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1},
+		),
 	)
 
 	testErr := errors.New("load error")
@@ -214,10 +214,10 @@ func TestGet_TierPriority(t *testing.T) {
 	tier2.Set(context.Background(), "key", &val2, 0)
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
-			{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
+			Layer[string]{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
+		),
 	)
 
 	got, hit, err := chain.Get(context.Background(), "key")
@@ -248,10 +248,10 @@ func TestDelete_AllLayers(t *testing.T) {
 	tier2.Set(context.Background(), "key", &val, 0)
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
-			{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
+			Layer[string]{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
+		),
 	)
 
 	err := chain.Delete(context.Background(), "key")
@@ -276,10 +276,10 @@ func TestHealthCheck_AllLayers(t *testing.T) {
 	tier2 := newMockCache[string]()
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
-			{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
-		},
+		WithLayers(
+			Layer[string]{Name: "tier1", Cache: tier1, TTL: 5 * time.Minute},
+			Layer[string]{Name: "tier2", Cache: tier2, TTL: 1 * time.Hour},
+		),
 	)
 
 	err := chain.HealthCheck(context.Background())
@@ -293,10 +293,10 @@ func TestWith_RealLocalCaches(t *testing.T) {
 	tier2 := local.NewCache[string]()
 
 	chain := NewChainedCache[string](
-		[]Layer[string]{
-			{Name: "local1", Cache: tier1, TTL: 5 * time.Minute},
-			{Name: "local2", Cache: tier2, TTL: 1 * time.Hour},
-		},
+		WithLayers(
+			Layer[string]{Name: "local1", Cache: tier1, TTL: 5 * time.Minute},
+			Layer[string]{Name: "local2", Cache: tier2, TTL: 1 * time.Hour},
+		),
 	)
 
 	ctx := context.Background()
@@ -344,6 +344,6 @@ func TestPanic_EmptyLayers(t *testing.T) {
 		}
 	}()
 
-	NewChainedCache[string]([]Layer[string]{})  // no layers
+	NewChainedCache[string]()  // no WithLayers option
 	t.Fatal("should have panicked")
 }
