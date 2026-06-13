@@ -7,12 +7,15 @@ import (
 	"time"
 )
 
-// Loader produces the value for a key on cache miss. Used by Cache.GetOrSet.
+// Loader produces the value for a key on cache miss. Used by ChainedCache.GetOrSet.
 type Loader[T any] func(ctx context.Context) (*T, error)
 
 // Cache is a type-safe key/value cache bound to a value type T.
 // Implementations may be single-process (in-memory) or distributed (Valkey).
 // T must be JSON-serialisable for distributed adapters that marshal at the boundary.
+//
+// Cache is a dumb storage layer — it does not implement GetOrSet, dedup, or
+// multi-layer orchestration. That logic lives in ChainedCache for transparency.
 type Cache[T any] interface {
 	// Get returns the cached value for key. The bool reports a hit: false means
 	// the key is absent or expired, with a nil value and nil error. A non-nil
@@ -27,11 +30,6 @@ type Cache[T any] interface {
 
 	// Exists reports whether key is present and unexpired.
 	Exists(ctx context.Context, key string) (bool, error)
-
-	// GetOrSet returns the cached value for key, or invokes load on a miss,
-	// stores the result under key with ttl, and returns it. The load callback
-	// runs only on a miss; its error is propagated and nothing is cached.
-	GetOrSet(ctx context.Context, key string, ttl time.Duration, load Loader[T]) (*T, error)
 
 	// HealthCheck verifies the backend is reachable. Safe for initialization checks.
 	HealthCheck(ctx context.Context) error
