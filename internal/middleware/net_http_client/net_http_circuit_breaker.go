@@ -51,15 +51,11 @@ func NewBreakerMiddleware(base http.RoundTripper, opts ...BreakerOption) http.Ro
 			return failureRate >= 0.5
 		},
 	}
-	classifier := cfg.FailureClassifier
-	if classifier == nil {
-		classifier = &DefaultFailureClassifier{}
-	}
 
 	return &breakerRoundTripper{
 		next:              base,
 		cb:                gobreaker.NewCircuitBreaker(settings),
-		failureClassifier: classifier,
+		failureClassifier: cfg.FailureClassifier,
 	}
 }
 

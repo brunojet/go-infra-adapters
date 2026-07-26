@@ -27,10 +27,10 @@ type BreakerOption func(cfg *circuitBreakerConfig)
 // - FailureClassifier: DefaultFailureClassifier (5xx, 429, network errors)
 func newCircuitBreakerConfig(opts ...BreakerOption) circuitBreakerConfig {
 	cfg := circuitBreakerConfig{
-		MaxFailures:      5,
-		ResetTimeout:     30 * time.Second,
-		HalfOpenRequests: 1,
-		// FailureClassifier is nil initially, will default to DefaultFailureClassifier in NewBreakerMiddleware
+		MaxFailures:       5,
+		ResetTimeout:      30 * time.Second,
+		HalfOpenRequests:  1,
+		FailureClassifier: &DefaultFailureClassifier{}, // default classifier for HTTP errors
 	}
 	for _, o := range opts {
 		if o == nil {

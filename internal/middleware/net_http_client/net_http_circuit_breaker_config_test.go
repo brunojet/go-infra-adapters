@@ -19,7 +19,7 @@ func TestNewCircuitBreakerConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 5, cfg.MaxFailures)               // 5 consecutive failures before opening
 	assert.Equal(t, 30*time.Second, cfg.ResetTimeout) // 30s before half-open
 	assert.Equal(t, 1, cfg.HalfOpenRequests)          // 1 probe request in half-open state
-	assert.Nil(t, cfg.FailureClassifier)              // nil, will use DefaultFailureClassifier
+	assert.Equal(t, &DefaultFailureClassifier{}, cfg.FailureClassifier)
 }
 
 func TestBreakerOptions_Applied(t *testing.T) {
