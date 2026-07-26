@@ -29,7 +29,7 @@ func (d *dummyRT) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestBreakerRoundTripper_NextNil_Panics(t *testing.T) {
-	br := &breakerRoundTripper{next: nil, cb: nil}
+	br := &breakerRoundTripper{next: nil, cb: nil, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil && resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -41,7 +41,7 @@ func TestBreakerRoundTripper_NextNil_Panics(t *testing.T) {
 
 func TestBreakerRoundTripper_DelegatesWhenCBNil(t *testing.T) {
 	d := &dummyRT{}
-	br := &breakerRoundTripper{next: d, cb: nil}
+	br := &breakerRoundTripper{next: d, cb: nil, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/ok", nil))
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -54,7 +54,7 @@ func TestBreakerRoundTripper_DelegatesWhenCBNil(t *testing.T) {
 func TestBreakerRoundTripper_WithCB_ExecutesAndReturnsResponse(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "test", Timeout: time.Second, MaxRequests: 1})
 	d := &dummyRT{}
-	br := &breakerRoundTripper{next: d, cb: cb}
+	br := &breakerRoundTripper{next: d, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/cb", nil))
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -92,7 +92,7 @@ func (e *errRT) RoundTrip(*http.Request) (*http.Response, error) { return e.resp
 func TestBreakerRoundTripper_WithCB_PropagatesError(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "err-test", MaxRequests: 1})
 	inner := &errRT{resp: nil, err: errors.New("transport error")}
-	br := &breakerRoundTripper{next: inner, cb: cb}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -109,7 +109,7 @@ func TestBreakerRoundTripper_WithCB_ClosesBodyOnErrorWithResponse(t *testing.T) 
 		resp: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("body"))},
 		err:  errors.New("transport error with body"),
 	}
-	br := &breakerRoundTripper{next: inner, cb: cb}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
 	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	if resp != nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -133,4 +133,65 @@ func TestNewBreakerMiddleware_ReadyToTrip(t *testing.T) {
 		defer func() { _ = resp2.Body.Close() }()
 	}
 	require.Error(t, err)
+}
+
+// TestBreakerRoundTripper_Returns5xxResponseIntact validates that the circuit breaker
+// increments internally but always returns the response body to the caller, never masking it.
+// This is critical: if a 5xx response comes back, the caller MUST receive it to handle errors.
+func TestBreakerRoundTripper_Returns5xxResponseIntact(t *testing.T) {
+	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "5xx-test", MaxRequests: 1})
+	bodyContent := "Internal Server Error details"
+	inner := &errRT{
+		resp: &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(strings.NewReader(bodyContent)),
+			Header:     make(http.Header),
+		},
+		err: nil, // No network error, just bad status code
+	}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
+
+	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
+
+	// Circuit breaker MUST return response intacta
+	require.NotNil(t, resp, "response should not be nil even with 5xx")
+	require.Nil(t, err, "error should be nil when response exists")
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	// Body must be readable by caller
+	body, readErr := io.ReadAll(resp.Body)
+	require.NoError(t, readErr)
+	assert.Equal(t, bodyContent, string(body))
+
+	_ = resp.Body.Close()
+}
+
+// TestBreakerRoundTripper_Returns429ResponseIntact validates that 429 rate limiting
+// responses are returned intacta with body, not masked.
+func TestBreakerRoundTripper_Returns429ResponseIntact(t *testing.T) {
+	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{Name: "429-test", MaxRequests: 1})
+	bodyContent := "Rate limit exceeded"
+	inner := &errRT{
+		resp: &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       io.NopCloser(strings.NewReader(bodyContent)),
+			Header:     make(http.Header),
+		},
+		err: nil,
+	}
+	br := &breakerRoundTripper{next: inner, cb: cb, failureClassifier: &DefaultFailureClassifier{}}
+
+	resp, err := br.RoundTrip(httptest.NewRequest("GET", "/", nil))
+
+	// Circuit breaker MUST return response
+	require.NotNil(t, resp, "response should not be nil even with 429")
+	require.Nil(t, err, "error should be nil when response exists")
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+
+	// Body must be readable
+	body, readErr := io.ReadAll(resp.Body)
+	require.NoError(t, readErr)
+	assert.Equal(t, bodyContent, string(body))
+
+	_ = resp.Body.Close()
 }

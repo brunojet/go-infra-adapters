@@ -11,8 +11,9 @@ import (
 // under a circuit breaker. When the breaker is nil it delegates directly to
 // the next RoundTripper.
 type breakerRoundTripper struct {
-	next http.RoundTripper
-	cb   *gobreaker.CircuitBreaker
+	next              http.RoundTripper
+	cb                *gobreaker.CircuitBreaker
+	failureClassifier FailureClassifier
 }
 
 // NewBreakerMiddleware returns a middleware builder: a function that accepts
@@ -29,19 +30,39 @@ func NewBreakerMiddleware(base http.RoundTripper, opts ...BreakerOption) http.Ro
 	cfg := newCircuitBreakerConfig(opts...)
 	// Guard casts from int -> uint32 to avoid potential overflow warnings
 	maxUint32Int := int(^uint32(0))
-	halfOpen := min(max(cfg.HalfOpenRequests, 0), maxUint32Int)
-	maxFailures := min(max(cfg.MaxFailures, 0), maxUint32Int)
+	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
+	halfOpen := uint32(min(max(cfg.HalfOpenRequests, 0), maxUint32Int))
+	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
+	maxFailures := uint32(min(max(cfg.MaxFailures, 0), maxUint32Int))
 
 	//nolint:gosec // G115: safe conversion to uint32 after bounds checks above
 	settings := gobreaker.Settings{
 		Name:        "breaker",
-		MaxRequests: uint32(halfOpen),
+		MaxRequests: halfOpen,
 		Timeout:     cfg.ResetTimeout,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures >= uint32(maxFailures)
+			// Don't trip if below consecutive failure threshold
+			if counts.ConsecutiveFailures < maxFailures || counts.Requests == 0 {
+				return false
+			}
+
+			// Trip if failure rate is high (gradual degradation)
+			failureRate := float64(counts.TotalFailures) / float64(counts.Requests)
+			return failureRate >= 0.5
 		},
 	}
-	return &breakerRoundTripper{next: base, cb: gobreaker.NewCircuitBreaker(settings)}
+
+	return &breakerRoundTripper{
+		next:              base,
+		cb:                gobreaker.NewCircuitBreaker(settings),
+		failureClassifier: cfg.FailureClassifier,
+	}
+}
+
+func closeResponseBody(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 }
 
 func (b *breakerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -52,19 +73,25 @@ func (b *breakerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return b.next.RoundTrip(req)
 	}
 
-	var resp *http.Response
-	_, err := b.cb.Execute(func() (any, error) {
-		r, err := b.next.RoundTrip(req)
-		if err != nil {
-			// ensure we don't leak a body when a RoundTrip returns both
-			// a response and an error (defensive)
-			if r != nil && r.Body != nil {
-				_ = r.Body.Close()
-			}
-			return nil, err
+	respVal, err := b.cb.Execute(func() (any, error) {
+		r, reqErr := b.next.RoundTrip(req)
+
+		if reqErr != nil {
+			closeResponseBody(r)
+			return nil, reqErr
 		}
-		resp = r
-		return resp, nil
+
+		// Classify response for circuit breaker tracking but never mask it
+		cbErr := b.failureClassifier.ClassifyError(r)
+		// Return response as any, use cbErr only to signal CB increment
+		return r, cbErr
 	})
-	return resp, err
+
+	// Response comes as any, error is only for CB tracking
+	if resp, ok := respVal.(*http.Response); ok {
+		return resp, nil
+	}
+
+	// No response, only error from request
+	return nil, err
 }

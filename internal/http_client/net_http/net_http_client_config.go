@@ -16,13 +16,15 @@ import (
 type MiddlewareFunc func(http.RoundTripper) http.RoundTripper
 
 type httpClientConfig struct {
-	baseURL           string
-	roundTripper      http.RoundTripper
-	observabilityMw   MiddlewareFunc   // Observability (OTEL, tracing)
-	customMiddlewares []MiddlewareFunc // Custom app-specific middlewares
-	timeout           time.Duration
-	headers           http.Header
-	logger            logger.Logger
+	baseURL            string
+	roundTripper       http.RoundTripper
+	observabilityMw    MiddlewareFunc          // Observability (OTEL, tracing)
+	customMiddlewares  []MiddlewareFunc        // Custom app-specific middlewares
+	circuitBreakerOpts []middlmw.BreakerOption // Circuit breaker middleware (optional)
+
+	timeout time.Duration
+	headers http.Header
+	logger  logger.Logger
 }
 
 // defaultHttpClientConfig returns a sensible default configuration.
@@ -34,9 +36,13 @@ func defaultHttpClientConfig() httpClientConfig {
 		roundTripper:      http.DefaultTransport,
 		observabilityMw:   nil, // Optional
 		customMiddlewares: make([]MiddlewareFunc, 0),
-		timeout:           0, // 0 means no timeout (stdlib default)
-		headers:           make(http.Header),
-		logger:            internallgr.Default(),
+
+		// Circuit breaker defaults (disabled by default)
+		circuitBreakerOpts: make([]middlmw.BreakerOption, 0),
+
+		timeout: 0, // 0 means no timeout (stdlib default)
+		headers: make(http.Header),
+		logger:  internallgr.Default(),
 	}
 }
 
@@ -222,10 +228,38 @@ func WithDialContext(timeout, keepAlive time.Duration) HttpClientOption {
 	}
 }
 
+// WithCircuitBreakerMaxFailures enables circuit breaker and sets max consecutive failures before opening.
+func WithCircuitBreakerMaxFailures(n int) HttpClientOption {
+	return func(c *httpClientConfig) {
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerMaxFailures(n))
+	}
+}
+
+// WithCircuitBreakerResetTimeout enables circuit breaker and sets reset timeout (half-open state).
+func WithCircuitBreakerResetTimeout(d time.Duration) HttpClientOption {
+	return func(c *httpClientConfig) {
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerResetTimeout(d))
+	}
+}
+
+// WithCircuitBreakerHalfOpenRequests enables circuit breaker and sets probe requests in half-open state.
+func WithCircuitBreakerHalfOpenRequests(n int) HttpClientOption {
+	return func(c *httpClientConfig) {
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithCircuitBreakerHalfOpenRequests(n))
+	}
+}
+
+// WithCircuitBreakerFailureClassifier enables circuit breaker with custom error classifier.
+func WithCircuitBreakerFailureClassifier(fc middlmw.FailureClassifier) HttpClientOption {
+	return func(c *httpClientConfig) {
+		c.circuitBreakerOpts = append(c.circuitBreakerOpts, middlmw.WithFailureClassifier(fc))
+	}
+}
+
 // buildFinalRoundTripper composes RoundTripper middlewares.
 //
-// Wrapping order (code):      baseRT → customMWs → headerControl → observability
-// Execution order (request):  observability → headerControl → customMWs → baseRT
+// Wrapping order (code):      baseRT → CB → customMWs → headerControl → observability
+// Execution order (request):  observability → headerControl → customMWs → CB → baseRT
 //
 // Note: Last wrapped = First executed! Middlewares wrap each other like onions.
 //
@@ -233,32 +267,42 @@ func WithDialContext(timeout, keepAlive time.Duration) HttpClientOption {
 //  1. ObservabilityMiddleware (outermost) - OTEL tracing, metrics (optional)
 //     ↓ Sees original request, logs/traces everything
 //  2. HeaderControl - sanitizes sensitive headers (Authorization, Cookie, etc)
-//     ↓ Always active, removes dangerous headers BEFORE custom middleware
+//     ↓ Always active, removes dangerous headers BEFORE custom logic
 //     ↓ Security baseline: ensures custom MW doesn't accidentally leak credentials
-//  3. CustomMiddlewares - circuit breaker, retry, custom logic (optional)
+//  3. CustomMiddlewares - retry, custom logic (optional)
 //     ↓ Works with sanitized headers (safe to implement custom logic)
-//     ↓ Retry/circuit-breaker don't need Authorization to function
-//  4. BaseRoundTripper - sends request to server
+//     ↓ Executes before CB so retry can work effectively
+//  4. CircuitBreaker - protects backend from overload (optional, disabled by default)
+//     ↓ Monitors server failures and opens circuit when degraded
+//     ↓ Close to network layer for accurate failure detection
+//  5. BaseRoundTripper - sends request to server
 func (cfg *httpClientConfig) buildFinalRoundTripper() http.RoundTripper {
 	// Wrap 1: BaseRoundTripper (innermost - executes last)
 	finalRT := cfg.roundTripper
 
-	// Wrap 2: CustomMiddlewares (execute 2nd)
-	// Circuit breaker, retry, custom logic - work with sanitized headers
-	// These are developer-controlled, but protected by HeaderControl below
+	// Wrap 2: CircuitBreaker (protects the network layer)
+	// Optional: protects backend from cascading failures
+	// Monitors server errors and opens circuit when degraded
+	if len(cfg.circuitBreakerOpts) > 0 {
+		finalRT = middlmw.NewBreakerMiddleware(finalRT, cfg.circuitBreakerOpts...)
+	}
+
+	// Wrap 3: CustomMiddlewares (executes before CB)
+	// Retry, custom logic - work with sanitized headers
+	// Positioned before CB so retry logic can work effectively
 	for _, mw := range cfg.customMiddlewares {
 		finalRT = mw(finalRT)
 	}
 
-	// Wrap 3: HeaderControl (executes 3rd - BEFORE custom middlewares)
-	// Sanitizes headers before custom logic runs
+	// Wrap 4: HeaderControl (security baseline)
+	// Sanitizes headers before downstream processing
 	// Ensures even buggy custom middleware can't leak Authorization/Cookie
 	finalRT = middlmw.NewHeaderControlMiddleware(
 		finalRT,
 		middlmw.WithLogger(cfg.logger),
 	)
 
-	// Wrap 4: ObservabilityMiddleware (outermost - executes first)
+	// Wrap 5: ObservabilityMiddleware (outermost - executes first)
 	// Optional: OTEL tracing, metrics
 	// Sees all requests in their original form before any processing
 	if cfg.observabilityMw != nil {

@@ -7,9 +7,10 @@ import (
 // circuitBreakerConfig configures the circuit breaker used by the
 // Breaker middleware.
 type circuitBreakerConfig struct {
-	MaxFailures      int           // consecutive failures before opening
-	ResetTimeout     time.Duration // how long to wait before transitioning to half-open
-	HalfOpenRequests int           // probe requests allowed in half-open state
+	MaxFailures       int               // consecutive failures before opening
+	ResetTimeout      time.Duration     // how long to wait before transitioning to half-open
+	HalfOpenRequests  int               // probe requests allowed in half-open state
+	FailureClassifier FailureClassifier // error classification for circuit breaker increments
 }
 
 // BreakerOption configures a CircuitBreakerConfig.
@@ -18,8 +19,19 @@ type BreakerOption func(cfg *circuitBreakerConfig)
 
 // newCircuitBreakerConfig builds a CircuitBreakerConfig applying provided
 // functional options.
+//
+// Defaults (conservative, suitable for production HTTP clients):
+// - MaxFailures: 5 consecutive failures before opening
+// - ResetTimeout: 30s before transitioning to half-open
+// - HalfOpenRequests: 1 probe request allowed in half-open state
+// - FailureClassifier: DefaultFailureClassifier (5xx, 429, network errors)
 func newCircuitBreakerConfig(opts ...BreakerOption) circuitBreakerConfig {
-	cfg := circuitBreakerConfig{}
+	cfg := circuitBreakerConfig{
+		MaxFailures:       5,
+		ResetTimeout:      30 * time.Second,
+		HalfOpenRequests:  1,
+		FailureClassifier: &DefaultFailureClassifier{}, // default classifier for HTTP errors
+	}
 	for _, o := range opts {
 		if o == nil {
 			continue
@@ -58,5 +70,14 @@ func WithCircuitBreakerHalfOpenRequests(n int) BreakerOption {
 			panic("half-open requests cannot be negative")
 		}
 		c.HalfOpenRequests = n
+	}
+}
+
+// WithFailureClassifier sets a custom error classifier for the circuit breaker.
+func WithFailureClassifier(classifier FailureClassifier) BreakerOption {
+	return func(c *circuitBreakerConfig) {
+		if classifier != nil {
+			c.FailureClassifier = classifier
+		}
 	}
 }

@@ -15,9 +15,11 @@ func TestNewCircuitBreakerConfig_NilOptionSkipped(t *testing.T) {
 
 func TestNewCircuitBreakerConfig_Defaults(t *testing.T) {
 	cfg := newCircuitBreakerConfig()
-	assert.Equal(t, 0, cfg.MaxFailures)
-	assert.Equal(t, time.Duration(0), cfg.ResetTimeout)
-	assert.Equal(t, 0, cfg.HalfOpenRequests)
+	// Defaults: conservative, production-ready values
+	assert.Equal(t, 5, cfg.MaxFailures)               // 5 consecutive failures before opening
+	assert.Equal(t, 30*time.Second, cfg.ResetTimeout) // 30s before half-open
+	assert.Equal(t, 1, cfg.HalfOpenRequests)          // 1 probe request in half-open state
+	assert.Equal(t, &DefaultFailureClassifier{}, cfg.FailureClassifier)
 }
 
 func TestBreakerOptions_Applied(t *testing.T) {
