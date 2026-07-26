@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	pkglogger "github.com/brunojet/go-infra-adapters/v4/pkg/logger"
 )
 
 func TestGet_Hit(t *testing.T) {
@@ -242,4 +244,61 @@ func TestWithLoggerNil(t *testing.T) {
 
 	NewLocalCache[string](WithLogger(nil))
 	t.Fatal("should have panicked")
+}
+
+type spyLogger struct{ warnCalls int }
+
+func (s *spyLogger) Debug(context.Context, string, ...pkglogger.Field) {}
+func (s *spyLogger) Info(context.Context, string, ...pkglogger.Field)  {}
+func (s *spyLogger) Warn(context.Context, string, ...pkglogger.Field) {
+	s.warnCalls++
+}
+func (s *spyLogger) Error(context.Context, string, error, ...pkglogger.Field) {}
+
+func TestWithLogger_Applied(t *testing.T) {
+	spy := &spyLogger{}
+	c := NewLocalCache[string](WithLogger(spy))
+	if c.logger != pkglogger.Logger(spy) {
+		t.Fatal("expected configured logger to be used")
+	}
+}
+
+func TestWithMaxBytes_Applied(t *testing.T) {
+	c := NewLocalCache[string](WithMaxBytes(10 * 1024 * 1024))
+	ctx := context.Background()
+	val := "x"
+
+	if err := c.Set(ctx, "key", &val, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, hit, _ := c.Get(ctx, "key"); !hit {
+		t.Fatal("expected hit after custom maxBytes")
+	}
+}
+
+func TestWithMaxBytes_PanicOnInvalid(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for non-positive maxBytes")
+		}
+	}()
+
+	WithMaxBytes(0)
+	t.Fatal("should have panicked")
+}
+
+func TestExists_EmptyKey(t *testing.T) {
+	c := NewLocalCache[string]()
+	ctx := context.Background()
+
+	_, err := c.Exists(ctx, "")
+	if err != errEmptyKey {
+		t.Fatalf("expected errEmptyKey, got %v", err)
+	}
+}
+
+func TestEstimateSize_NilValue(t *testing.T) {
+	if got := estimateSize[string](nil); got != 0 {
+		t.Fatalf("expected 0 for nil value, got %d", got)
+	}
 }
