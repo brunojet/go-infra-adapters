@@ -12,10 +12,10 @@ import (
 )
 
 type mockCache[T any] struct {
-	mu    sync.Mutex
-	data  map[string]*T
-	ttls  map[string]time.Duration
-	hits  int
+	mu     sync.Mutex
+	data   map[string]*T
+	ttls   map[string]time.Duration
+	hits   int
 	misses int
 	setErr error
 }
@@ -71,7 +71,9 @@ func (m *mockCache[T]) HealthCheck(_ context.Context) error {
 func TestGetOrSet_Hit(t *testing.T) {
 	tier1 := newMockCache[string]()
 	cached := "cached"
-	tier1.Set(context.Background(), "key", &cached, 0)
+	if err := tier1.Set(context.Background(), "key", &cached, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	chain := NewChainedCache[string](
 		WithLayers(
@@ -156,7 +158,7 @@ func TestGetOrSet_Dedup(t *testing.T) {
 			defer wg.Done()
 			val, err := chain.GetOrSet(context.Background(), "key", 5*time.Minute, func(ctx context.Context) (*int, error) {
 				atomic.AddInt64(&loadCalls, 1)
-				time.Sleep(10 * time.Millisecond)  // simulate slow load
+				time.Sleep(10 * time.Millisecond) // simulate slow load
 				v := 42
 				return &v, nil
 			})
@@ -211,7 +213,9 @@ func TestGet_TierPriority(t *testing.T) {
 
 	// Populate only tier2
 	val2 := "from_tier2"
-	tier2.Set(context.Background(), "key", &val2, 0)
+	if err := tier2.Set(context.Background(), "key", &val2, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	chain := NewChainedCache[string](
 		WithLayers(
@@ -244,8 +248,12 @@ func TestDelete_AllLayers(t *testing.T) {
 	tier2 := newMockCache[string]()
 
 	val := "x"
-	tier1.Set(context.Background(), "key", &val, 0)
-	tier2.Set(context.Background(), "key", &val, 0)
+	if err := tier1.Set(context.Background(), "key", &val, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := tier2.Set(context.Background(), "key", &val, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	chain := NewChainedCache[string](
 		WithLayers(
@@ -259,7 +267,7 @@ func TestDelete_AllLayers(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	time.Sleep(50 * time.Millisecond)  // wait for async delete
+	time.Sleep(50 * time.Millisecond) // wait for async delete
 
 	_, hit, _ := tier1.Get(context.Background(), "key")
 	if hit {
@@ -324,7 +332,7 @@ func TestWith_RealLocalCaches(t *testing.T) {
 
 	// Next GetOrSet should hit tier1 (no load)
 	loadCalls = 0
-	got, err = chain.GetOrSet(ctx, "key", 5*time.Minute, func(ctx context.Context) (*string, error) {
+	_, err = chain.GetOrSet(ctx, "key", 5*time.Minute, func(ctx context.Context) (*string, error) {
 		loadCalls++
 		return nil, errors.New("should not be called")
 	})
@@ -344,6 +352,6 @@ func TestPanic_EmptyLayers(t *testing.T) {
 		}
 	}()
 
-	NewChainedCache[string]()  // no WithLayers option
+	NewChainedCache[string]() // no WithLayers option
 	t.Fatal("should have panicked")
 }

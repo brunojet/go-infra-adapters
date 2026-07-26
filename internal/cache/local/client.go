@@ -10,10 +10,10 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dgraph-io/ristretto"
 	"github.com/brunojet/go-infra-adapters/v4/internal/logger"
 	"github.com/brunojet/go-infra-adapters/v4/pkg/cache/contracts"
 	pkglogger "github.com/brunojet/go-infra-adapters/v4/pkg/logger"
+	"github.com/dgraph-io/ristretto"
 )
 
 var (
@@ -26,7 +26,7 @@ type CacheOption func(*cacheConfig)
 
 type cacheConfig struct {
 	logger   pkglogger.Logger
-	maxBytes int64  // max bytes for Ristretto cache (default 100MB)
+	maxBytes int64 // max bytes for Ristretto cache (default 100MB)
 }
 
 // WithLogger configures a structured logger. Panics if logger is nil.
@@ -52,15 +52,6 @@ func WithMaxBytes(bytes int64) CacheOption {
 // noopLogger discards all writes (zero branching in callers).
 var noopLogger = logger.Default()
 
-type entry[T any] struct {
-	val      *T
-	expireAt time.Time // zero means no expiry
-}
-
-func (e entry[T]) expired(now time.Time) bool {
-	return !e.expireAt.IsZero() && now.After(e.expireAt)
-}
-
 // LocalCache is an in-memory cache backed by Ristretto with LRU eviction.
 // Type-safe, bounded, and production-grade.
 type LocalCache[T any] struct {
@@ -73,7 +64,7 @@ type LocalCache[T any] struct {
 func NewLocalCache[T any](opts ...CacheOption) *LocalCache[T] {
 	cfg := &cacheConfig{
 		logger:   noopLogger,
-		maxBytes: 100 * 1024 * 1024,  // 100MB default
+		maxBytes: 100 * 1024 * 1024, // 100MB default
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -83,7 +74,7 @@ func NewLocalCache[T any](opts ...CacheOption) *LocalCache[T] {
 
 	// Create Ristretto cache
 	ristrettoConfig := &ristretto.Config{
-		NumCounters: cfg.maxBytes / 100,  // Ristretto tuning
+		NumCounters: cfg.maxBytes / 100, // Ristretto tuning
 		MaxCost:     cfg.maxBytes,
 		BufferItems: 64,
 	}
@@ -99,17 +90,17 @@ func NewLocalCache[T any](opts ...CacheOption) *LocalCache[T] {
 }
 
 // Get returns the value for key and whether it was a live hit.
-func (c *LocalCache[T]) Get(_ context.Context, key string) (*T, bool, error) {
+func (c *LocalCache[T]) Get(_ context.Context, key string) (val *T, hit bool, err error) {
 	if key == "" {
 		return nil, false, errEmptyKey
 	}
 
-	val, ok := c.cache.Get(key)
+	raw, ok := c.cache.Get(key)
 	if !ok {
 		return nil, false, nil
 	}
 
-	typed, ok := val.(*T)
+	typed, ok := raw.(*T)
 	if !ok {
 		c.logger.Warn(context.Background(), "type assertion failed in Get",
 			pkglogger.String("key", key))
@@ -135,7 +126,7 @@ func (c *LocalCache[T]) Set(_ context.Context, key string, val *T, ttl time.Dura
 			pkglogger.String("key", key),
 			pkglogger.String("cost_bytes", fmt.Sprintf("%d", cost)))
 	}
-	c.cache.Wait()  // Ensure write is processed before returning
+	c.cache.Wait() // Ensure write is processed before returning
 	return nil
 }
 

@@ -16,9 +16,9 @@ import (
 
 // Layer represents one cache tier in the chain.
 type Layer[T any] struct {
-	Name  string              // "local", "valkey", "origin" (for logging)
-	Cache contracts.Cache[T]  // The actual cache storage
-	TTL   time.Duration       // Default TTL for this layer (0 = no expiry)
+	Name  string             // "local", "valkey", "origin" (for logging)
+	Cache contracts.Cache[T] // The actual cache storage
+	TTL   time.Duration      // Default TTL for this layer (0 = no expiry)
 }
 
 // ChainedCacheOption[T] configures a ChainedCache. Use With* functions to create options.
@@ -55,7 +55,7 @@ func WithLogger[T any](l pkglogger.Logger) ChainedCacheOption[T] {
 // cache-aside with concurrent deduplication and automatic layer population.
 type ChainedCache[T any] struct {
 	layers []*Layer[T]
-	group  singleflight.Group  // dedupes concurrent GetOrSet on same key
+	group  singleflight.Group // dedupes concurrent GetOrSet on same key
 	logger pkglogger.Logger
 }
 
@@ -91,14 +91,14 @@ func NewChainedCache[T any](opts ...ChainedCacheOption[T]) *ChainedCache[T] {
 
 // Get returns the value, trying layers in order until a hit. A hit in layer N
 // triggers async population of layers 0..N-1 (warmup).
-func (cc *ChainedCache[T]) Get(ctx context.Context, key string) (*T, bool, error) {
+func (cc *ChainedCache[T]) Get(ctx context.Context, key string) (val *T, hit bool, err error) {
 	for i, layer := range cc.layers {
 		val, hit, err := layer.Cache.Get(ctx, key)
 		if err != nil {
 			cc.logger.Warn(ctx, "cache layer get failed",
 				pkglogger.String("layer", layer.Name),
 				pkglogger.Error("err", err))
-			continue  // try next layer
+			continue // try next layer
 		}
 		if hit {
 			// Hit in layer i: warm up layers 0..i-1 asynchronously
@@ -192,7 +192,7 @@ func (cc *ChainedCache[T]) loadAndStore(
 	// Load origin (only once per batch of concurrent requests)
 	val, err := load(ctx)
 	if err != nil {
-		return nil, err  // origin error: propagate, don't cache
+		return nil, err // origin error: propagate, don't cache
 	}
 
 	// Populate all layers with the loaded value (async, best-effort)
@@ -257,13 +257,4 @@ func resolveTTL(layerTTL, defaultTTL time.Duration) time.Duration {
 		return defaultTTL
 	}
 	return layerTTL
-}
-
-// Helper to convert []Layer to []*Layer
-func sliceLayers[T any](layers []Layer[T]) []*Layer[T] {
-	result := make([]*Layer[T], len(layers))
-	for i := range layers {
-		result[i] = &layers[i]
-	}
-	return result
 }

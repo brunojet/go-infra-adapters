@@ -11,7 +11,7 @@ import (
 // Layer represents one cache tier in the chain (exported from internal).
 type Layer[T any] = internalchain.Layer[T]
 
-// Option[T] configures a ChainedCache. Use With* functions to create options.
+// Option configures a ChainedCache. Use With* functions to create options.
 type Option[T any] = internalchain.ChainedCacheOption[T]
 
 // WithLayers adds one or more cache layers to the chain (order matters: fastest first).

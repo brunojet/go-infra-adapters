@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/brunojet/go-infra-adapters/v4/pkg/logger"
 )
 
 func TestGet_Hit(t *testing.T) {
@@ -140,7 +138,9 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 	val := "x"
 
-	c.Set(ctx, "key", &val, 0)
+	if err := c.Set(ctx, "key", &val, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	err := c.Delete(ctx, "key")
 	if err != nil {
@@ -178,7 +178,9 @@ func TestExists_Hit(t *testing.T) {
 	ctx := context.Background()
 	val := "x"
 
-	c.Set(ctx, "key", &val, 0)
+	if err := c.Set(ctx, "key", &val, 0); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	exists, err := c.Exists(ctx, "key")
 	if err != nil {
@@ -207,7 +209,9 @@ func TestExists_ExpiredKey(t *testing.T) {
 	ctx := context.Background()
 	val := "x"
 
-	c.Set(ctx, "key", &val, 10*time.Millisecond)
+	if err := c.Set(ctx, "key", &val, 10*time.Millisecond); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 	time.Sleep(15 * time.Millisecond)
 
 	exists, err := c.Exists(ctx, "key")
@@ -218,7 +222,6 @@ func TestExists_ExpiredKey(t *testing.T) {
 		t.Fatal("expected exists=false for expired key")
 	}
 }
-
 
 func TestHealthCheck(t *testing.T) {
 	c := NewLocalCache[string]()
@@ -240,15 +243,3 @@ func TestWithLoggerNil(t *testing.T) {
 	NewLocalCache[string](WithLogger(nil))
 	t.Fatal("should have panicked")
 }
-
-type testLogger struct {
-	warnCalls int
-}
-
-func (tl *testLogger) Debug(ctx context.Context, msg string, fields ...logger.Field) {}
-func (tl *testLogger) Info(ctx context.Context, msg string, fields ...logger.Field)  {}
-func (tl *testLogger) Warn(ctx context.Context, msg string, fields ...logger.Field) {
-	tl.warnCalls++
-}
-func (tl *testLogger) Error(ctx context.Context, msg string, err error, fields ...logger.Field) {}
-
